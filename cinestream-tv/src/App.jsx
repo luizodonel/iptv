@@ -275,7 +275,7 @@ export default function App() {
                 <div className="section-title-wrap">
                   <TrendingUp className="section-icon text-accent" size={22} />
                   <div>
-                    <h2 className="section-heading">Em Alta no CineStream</h2>
+                    <h2 className="section-heading">Em Alta no Oninha TV</h2>
                     <p className="section-subheading">Os filmes e séries mais populares da semana</p>
                   </div>
                 </div>

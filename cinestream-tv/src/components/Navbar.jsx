@@ -36,7 +36,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenSearch, favorite
               <Radio className="logo-icon pulse-glow" size={24} />
             </div>
             <div className="brand-text">
-              <span className="brand-title">CineStream</span>
+              <span className="brand-title">Oninha</span>
               <span className="brand-badge">TV</span>
             </div>
           </div>
