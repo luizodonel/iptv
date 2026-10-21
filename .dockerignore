@@ -1,0 +1,6 @@
+node_modules
+cinestream-tv/node_modules
+cinestream-tv/dist
+.git
+.github
+*.log
