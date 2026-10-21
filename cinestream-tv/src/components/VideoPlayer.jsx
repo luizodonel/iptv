@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Hls from 'hls.js';
+import { toSafeStreamUrl, SafeStreamLoader } from '../services/proxyService';
 import { 
   Play, 
   Pause, 
@@ -100,6 +101,19 @@ export default function VideoPlayer({
   const activeSource = sources[currentSourceIndex] || null;
   const streamUrl = typeof activeSource === 'string' ? activeSource : activeSource?.url;
 
+  const handleSourceFail = useCallback(() => {
+    setCurrentSourceIndex(prevIdx => {
+      const nextIdx = prevIdx + 1;
+      if (nextIdx < sources.length) {
+        console.log(`Fonte ${prevIdx + 1} falhou. Alternando para fonte ${nextIdx + 1}...`);
+        return nextIdx;
+      }
+      setIsLoading(false);
+      setErrorMsg('Todas as fontes deste conteúdo falharam ou estão indisponíveis no momento.');
+      return prevIdx;
+    });
+  }, [sources.length]);
+
   const loadStream = useCallback((url) => {
     if (!url || !videoRef.current) return;
 
@@ -113,13 +127,17 @@ export default function VideoPlayer({
     }
 
     const video = videoRef.current;
-    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/');
+    const safeUrl = toSafeStreamUrl(url);
+    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/') || safeUrl.includes('.m3u8');
 
     if (isHlsUrl) {
       if (Hls.isSupported()) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
+          loader: SafeStreamLoader,
+          pLoader: SafeStreamLoader,
+          fLoader: SafeStreamLoader,
           manifestLoadingTimeOut: 15000,
           manifestLoadingMaxRetry: 2,
           levelLoadingTimeOut: 15000,
@@ -127,7 +145,7 @@ export default function VideoPlayer({
         });
 
         hlsRef.current = hls;
-        hls.loadSource(url);
+        hls.loadSource(safeUrl);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -140,15 +158,12 @@ export default function VideoPlayer({
             console.warn('HLS fatal error encountered:', data.details);
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                // Try recovering or switch source
-                hls.startLoad();
                 handleSourceFail();
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
                 hls.recoverMediaError();
                 break;
               default:
-                hls.destroy();
                 handleSourceFail();
                 break;
             }
@@ -156,14 +171,14 @@ export default function VideoPlayer({
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS (Safari/iOS)
-        video.src = url;
+        video.src = safeUrl;
         video.play().catch(() => setIsPlaying(false));
       } else {
         setErrorMsg('Seu navegador não suporta reprodução HLS nativa.');
       }
     } else {
       // Direct MP4 or standard video
-      video.src = url;
+      video.src = safeUrl;
       video.load();
 
       // Resume watch progress if available
@@ -174,18 +189,7 @@ export default function VideoPlayer({
 
       video.play().catch(() => setIsPlaying(false));
     }
-  }, [item.id]);
-
-  const handleSourceFail = useCallback(() => {
-    if (currentSourceIndex + 1 < sources.length) {
-      const nextIdx = currentSourceIndex + 1;
-      console.log(`Fonte falhou. Alternando para fonte ${nextIdx + 1}...`);
-      setCurrentSourceIndex(nextIdx);
-    } else {
-      setIsLoading(false);
-      setErrorMsg('Todas as fontes deste conteúdo falharam ou estão indisponíveis no momento.');
-    }
-  }, [currentSourceIndex, sources.length]);
+  }, [handleSourceFail, item.id]);
 
   useEffect(() => {
     if (streamUrl) {

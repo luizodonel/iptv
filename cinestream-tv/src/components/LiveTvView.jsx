@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Hls from 'hls.js';
+import { toSafeStreamUrl, SafeStreamLoader } from '../services/proxyService';
 import { 
   Tv, 
   Trophy, 
@@ -195,6 +196,19 @@ export default function LiveTvView({
   const currentSource = sources[currentSourceIndex] || null;
   const streamUrl = typeof currentSource === 'string' ? currentSource : currentSource?.url;
 
+  const handleFailover = useCallback(() => {
+    setCurrentSourceIndex(prevIdx => {
+      const nextIdx = prevIdx + 1;
+      if (nextIdx < sources.length) {
+        console.log(`Fonte ${prevIdx + 1} falhou. Tentando servidor ${nextIdx + 1}...`);
+        return nextIdx;
+      }
+      setIsLoading(false);
+      setErrorMsg('Nenhuma fonte disponível funcionou para este canal no momento.');
+      return prevIdx;
+    });
+  }, [sources.length]);
+
   // Load and play HLS stream
   const loadStream = useCallback((url) => {
     if (!url || !videoRef.current) return;
@@ -209,7 +223,8 @@ export default function LiveTvView({
     }
 
     const video = videoRef.current;
-    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/');
+    const safeUrl = toSafeStreamUrl(url);
+    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/') || safeUrl.includes('.m3u8');
 
     const attemptPlay = () => {
       setIsLoading(false);
@@ -238,6 +253,9 @@ export default function LiveTvView({
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
+        loader: SafeStreamLoader,
+        pLoader: SafeStreamLoader,
+        fLoader: SafeStreamLoader,
         manifestLoadingTimeOut: 15000,
         manifestLoadingMaxRetry: 2,
         levelLoadingTimeOut: 15000,
@@ -245,7 +263,7 @@ export default function LiveTvView({
       });
 
       hlsRef.current = hls;
-      hls.loadSource(url);
+      hls.loadSource(safeUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -257,39 +275,26 @@ export default function LiveTvView({
           console.warn('HLS stream fatal error:', data.details);
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
               handleFailover();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();
               break;
             default:
-              hls.destroy();
               handleFailover();
               break;
           }
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = url;
+      video.src = safeUrl;
       attemptPlay();
     } else {
-      video.src = url;
+      video.src = safeUrl;
       video.load();
       attemptPlay();
     }
-  }, [currentSourceIndex, sources.length]);
-
-  const handleFailover = () => {
-    if (currentSourceIndex + 1 < sources.length) {
-      const nextIdx = currentSourceIndex + 1;
-      console.log(`Fonte falhou. Tentando servidor ${nextIdx + 1}...`);
-      setCurrentSourceIndex(nextIdx);
-    } else {
-      setIsLoading(false);
-      setErrorMsg('Nenhuma fonte disponível funcionou para este canal no momento.');
-    }
-  };
+  }, [handleFailover, sources.length]);
 
   useEffect(() => {
     if (streamUrl) {
