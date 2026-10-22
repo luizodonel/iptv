@@ -114,7 +114,7 @@ export default function VideoPlayer({
     });
   }, [sources.length]);
 
-  const loadStream = useCallback((url) => {
+  const loadStream = useCallback((url, source = null) => {
     if (!url || !videoRef.current) return;
 
     setIsLoading(true);
@@ -127,8 +127,8 @@ export default function VideoPlayer({
     }
 
     const video = videoRef.current;
-    const safeUrl = toSafeStreamUrl(url);
-    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/') || safeUrl.includes('.m3u8');
+    const safeUrl = toSafeStreamUrl(url, source?.referer, source?.agent);
+    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/') || safeUrl.includes('.m3u8') || safeUrl.includes('/api/proxy');
 
     if (isHlsUrl) {
       if (Hls.isSupported()) {
@@ -193,7 +193,7 @@ export default function VideoPlayer({
 
   useEffect(() => {
     if (streamUrl) {
-      loadStream(streamUrl);
+      loadStream(streamUrl, activeSource);
     } else {
       setIsLoading(false);
       setErrorMsg('Nenhuma URL de transmissão válida encontrada para este item.');
@@ -205,7 +205,7 @@ export default function VideoPlayer({
         hlsRef.current = null;
       }
     };
-  }, [streamUrl, loadStream]);
+  }, [streamUrl, activeSource, loadStream]);
 
   // Video event listeners
   const onTimeUpdate = () => {

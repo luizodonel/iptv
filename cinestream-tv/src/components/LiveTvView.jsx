@@ -210,7 +210,7 @@ export default function LiveTvView({
   }, [sources.length]);
 
   // Load and play HLS stream
-  const loadStream = useCallback((url) => {
+  const loadStream = useCallback((url, source = null) => {
     if (!url || !videoRef.current) return;
 
     setIsLoading(true);
@@ -223,8 +223,8 @@ export default function LiveTvView({
     }
 
     const video = videoRef.current;
-    const safeUrl = toSafeStreamUrl(url);
-    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/') || safeUrl.includes('.m3u8');
+    const safeUrl = toSafeStreamUrl(url, source?.referer, source?.agent);
+    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/') || safeUrl.includes('.m3u8') || safeUrl.includes('/api/proxy');
 
     const attemptPlay = () => {
       setIsLoading(false);
@@ -298,7 +298,7 @@ export default function LiveTvView({
 
   useEffect(() => {
     if (streamUrl) {
-      loadStream(streamUrl);
+      loadStream(streamUrl, currentSource);
     } else {
       setIsLoading(false);
       setErrorMsg('Nenhuma URL de transmissão válida encontrada para este canal.');
@@ -310,7 +310,7 @@ export default function LiveTvView({
         hlsRef.current = null;
       }
     };
-  }, [streamUrl, loadStream]);
+  }, [streamUrl, currentSource, loadStream]);
 
   // Video Controls
   const togglePlay = () => {

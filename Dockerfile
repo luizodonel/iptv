@@ -10,10 +10,16 @@ RUN npm install
 COPY cinestream-tv/ ./
 RUN npm run build
 
-# Stage 2: Servir aplicação estática com Nginx
-FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+# Stage 2: Servidor Node.js com Proxy HLS e SPA estático
+FROM node:20-alpine
+WORKDIR /app
+
+# Copiar arquivos compilados e script do servidor
+COPY --from=build /app/dist ./dist
+COPY server.js ./
+
+ENV PORT=3000
+ENV NODE_ENV=production
 
 EXPOSE 80 3000
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.js"]
