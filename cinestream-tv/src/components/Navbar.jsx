@@ -132,8 +132,11 @@ export default function Navbar({
                     {currentUser.username ? `@${currentUser.username}` : (currentUser.nome?.split(' ')[0] || 'Conta')}
                   </span>
                   {currentUser.assinaturaAtiva ? (
-                    <span className="user-plan-pill active" title={`${currentUser.limiteTelas} tela(s)`}>
-                      {currentUser.limiteTelas} Tela{currentUser.limiteTelas > 1 ? 's' : ''}
+                    <span 
+                      className={`user-plan-pill active ${currentUser.planoId === 'vitalicio' ? 'master-badge' : ''}`} 
+                      title={currentUser.planoId === 'vitalicio' ? 'Plano Master Vitalício Ilimitado' : `${currentUser.limiteTelas} tela(s)`}
+                    >
+                      {currentUser.planoId === 'vitalicio' ? '👑 Master' : `${currentUser.limiteTelas} Tela${currentUser.limiteTelas > 1 ? 's' : ''}`}
                     </span>
                   ) : (
                     <span className="user-plan-pill expired">Sem Plano</span>
@@ -170,7 +173,7 @@ export default function Navbar({
                       </div>
                       {currentUser.assinaturaAtiva && currentUser.fimAssinatura && (
                         <div className="sub-date-row">
-                          Até {new Date(currentUser.fimAssinatura).toLocaleDateString('pt-BR')}
+                          {currentUser.planoId === 'vitalicio' ? 'Acesso Vitalício Permanente' : `Até ${new Date(currentUser.fimAssinatura).toLocaleDateString('pt-BR')}`}
                         </div>
                       )}
                     </div>
