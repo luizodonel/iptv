@@ -534,7 +534,7 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const body = await readJsonBody(req);
-      const { planId } = body;
+      const planId = body.planId || body.planoId;
       const plano = PLANS[planId];
 
       if (!plano) {
