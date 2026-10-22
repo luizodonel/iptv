@@ -1,13 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Tv, 
-  Film, 
-  Clapperboard, 
-  Trophy, 
-  Star, 
-  Search, 
-  Home, 
-  Radio,
+import {
+  Tv,
+  Film,
+  Clapperboard,
+  Trophy,
+  Star,
   Crown,
   User,
   LogOut,
@@ -17,10 +14,10 @@ import {
   Sparkles
 } from 'lucide-react';
 
-export default function Navbar({ 
-  activeTab, 
-  setActiveTab, 
-  onOpenSearch, 
+export default function Navbar({
+  activeTab,
+  setActiveTab,
+  onOpenSearch,
   favoriteCount = 0,
   currentUser = null,
   onOpenAuth,
@@ -31,8 +28,7 @@ export default function Navbar({
   const menuRef = useRef(null);
 
   const navItems = [
-    { id: 'home', label: 'Início', icon: Home },
-    { id: 'channels', label: 'Canais Ao Vivo', icon: Tv, badge: '408' },
+    { id: 'channels', label: 'Canais Ao Vivo', icon: Tv },
     { id: 'movies', label: 'Filmes', icon: Film },
     { id: 'series', label: 'Séries', icon: Clapperboard },
     { id: 'sports', label: 'Jogos do Dia', icon: Trophy },
@@ -58,15 +54,12 @@ export default function Navbar({
       <header className="navbar-container">
         <div className="navbar-content">
           {/* Brand Logo */}
-          <div 
-            className="brand-logo" 
-            onClick={() => setActiveTab('home')}
+          <div
+            className="brand-logo"
+            onClick={() => setActiveTab('channels')}
             role="button"
             tabIndex={0}
           >
-            <div className="logo-icon-wrap">
-              <Radio className="logo-icon pulse-glow" size={24} />
-            </div>
             <div className="brand-text">
               <span className="brand-title">Oninha</span>
               <span className="brand-badge">TV</span>
@@ -95,20 +88,8 @@ export default function Navbar({
 
           {/* Top Actions */}
           <div className="navbar-actions">
-            {/* Search Trigger */}
-            <button 
-              id="btn-search-trigger"
-              className="search-trigger-btn"
-              onClick={onOpenSearch}
-              title="Buscar canais, filmes ou séries (Ctrl + K)"
-            >
-              <Search size={18} />
-              <span className="search-hint">Buscar...</span>
-              <kbd className="search-kbd">Ctrl+K</kbd>
-            </button>
-
             {/* Planos Button */}
-            <button 
+            <button
               className="nav-plans-btn pulse-hover"
               onClick={onOpenPlans}
               title="Ver planos e assinaturas"
@@ -120,7 +101,7 @@ export default function Navbar({
             {/* User Account / Auth Button */}
             {currentUser ? (
               <div className="user-menu-wrapper" ref={menuRef}>
-                <button 
+                <button
                   className={`user-avatar-btn ${userMenuOpen ? 'active' : ''}`}
                   onClick={() => setUserMenuOpen(prev => !prev)}
                   title="Menu do Usuário"
@@ -132,8 +113,8 @@ export default function Navbar({
                     {currentUser.username ? `@${currentUser.username}` : (currentUser.nome?.split(' ')[0] || 'Conta')}
                   </span>
                   {currentUser.assinaturaAtiva ? (
-                    <span 
-                      className={`user-plan-pill active ${currentUser.planoId === 'vitalicio' ? 'master-badge' : ''}`} 
+                    <span
+                      className={`user-plan-pill active ${currentUser.planoId === 'vitalicio' ? 'master-badge' : ''}`}
                       title={currentUser.planoId === 'vitalicio' ? 'Plano Master Vitalício Ilimitado' : `${currentUser.limiteTelas} tela(s)`}
                     >
                       {currentUser.planoId === 'vitalicio' ? '👑 Master' : `${currentUser.limiteTelas} Tela${currentUser.limiteTelas > 1 ? 's' : ''}`}
@@ -180,7 +161,7 @@ export default function Navbar({
 
                     <div className="dropdown-divider" />
 
-                    <button 
+                    <button
                       className="dropdown-item"
                       onClick={() => {
                         setUserMenuOpen(false);
@@ -191,7 +172,7 @@ export default function Navbar({
                       <span>{currentUser.assinaturaAtiva ? 'Gerenciar Planos' : 'Assinar Agora'}</span>
                     </button>
 
-                    <button 
+                    <button
                       className="dropdown-item text-danger"
                       onClick={() => {
                         setUserMenuOpen(false);
@@ -205,7 +186,7 @@ export default function Navbar({
                 )}
               </div>
             ) : (
-              <button 
+              <button
                 className="nav-login-btn"
                 onClick={onOpenAuth}
               >

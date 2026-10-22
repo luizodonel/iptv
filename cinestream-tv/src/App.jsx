@@ -47,7 +47,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('channels');
   const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // Auth & Subscription State
