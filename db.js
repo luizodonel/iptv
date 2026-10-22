@@ -48,9 +48,24 @@ class Database {
   }
 
   // --- Usuários ---
+  findUserByUsername(username) {
+    if (!username) return null;
+    const clean = username.trim().toLowerCase();
+    return this.data.users.find(u => (u.username && u.username.toLowerCase() === clean)) || null;
+  }
+
   findUserByEmail(email) {
     if (!email) return null;
-    return this.data.users.find(u => u.email.toLowerCase() === email.trim().toLowerCase()) || null;
+    return this.data.users.find(u => (u.email && u.email.toLowerCase() === email.trim().toLowerCase())) || null;
+  }
+
+  findUserByLogin(login) {
+    if (!login) return null;
+    const clean = login.trim().toLowerCase();
+    return this.data.users.find(u => 
+      (u.username && u.username.toLowerCase() === clean) || 
+      (u.email && u.email.toLowerCase() === clean)
+    ) || null;
   }
 
   findUserById(id) {
@@ -59,10 +74,16 @@ class Database {
   }
 
   createUser(userData) {
+    const rawUsername = (userData.username || userData.nome || '').trim();
+    const cleanUsername = rawUsername.replace(/\s+/g, '').toLowerCase();
+    const email = userData.email ? userData.email.trim().toLowerCase() : `${cleanUsername}@oninha.tv`;
+
     const newUser = {
       id: 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
-      nome: userData.nome.trim(),
-      email: userData.email.trim().toLowerCase(),
+      username: cleanUsername,
+      nome: userData.nome ? userData.nome.trim() : rawUsername,
+      telefone: userData.telefone ? userData.telefone.trim() : '',
+      email,
       senhaHash: userData.senhaHash,
       cpf: userData.cpf ? userData.cpf.replace(/\D/g, '') : '',
       createdAt: new Date().toISOString(),

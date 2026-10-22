@@ -50,7 +50,7 @@ export default function Navbar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const firstLetter = currentUser?.nome ? currentUser.nome.charAt(0).toUpperCase() : 'U';
+  const firstLetter = (currentUser?.username || currentUser?.nome || 'U').charAt(0).toUpperCase();
 
   return (
     <>
@@ -128,7 +128,9 @@ export default function Navbar({
                   <div className="avatar-circle">
                     {firstLetter}
                   </div>
-                  <span className="user-name-label">{currentUser.nome?.split(' ')[0]}</span>
+                  <span className="user-name-label">
+                    {currentUser.username ? `@${currentUser.username}` : (currentUser.nome?.split(' ')[0] || 'Conta')}
+                  </span>
                   {currentUser.assinaturaAtiva ? (
                     <span className="user-plan-pill active" title={`${currentUser.limiteTelas} tela(s)`}>
                       {currentUser.limiteTelas} Tela{currentUser.limiteTelas > 1 ? 's' : ''}
@@ -144,8 +146,12 @@ export default function Navbar({
                     <div className="dropdown-user-header">
                       <div className="dropdown-avatar">{firstLetter}</div>
                       <div className="dropdown-details">
-                        <span className="dropdown-name">{currentUser.nome}</span>
-                        <span className="dropdown-email">{currentUser.email}</span>
+                        <span className="dropdown-name">
+                          {currentUser.username ? `@${currentUser.username}` : (currentUser.nome || 'Usuário')}
+                        </span>
+                        <span className="dropdown-email">
+                          {currentUser.telefone || currentUser.email || ''}
+                        </span>
                       </div>
                     </div>
 

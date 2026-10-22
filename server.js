@@ -353,10 +353,30 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/auth/register' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      const { nome, email, senha, cpf, deviceId, deviceInfo } = body;
+      const { username, telefone, senha, confirmarSenha, email, nome, cpf, deviceId, deviceInfo } = body;
 
-      if (!nome || !email || !senha) {
-        sendJson(res, 400, { error: 'Nome, e-mail e senha são obrigatórios.' });
+      const cleanUsername = (username || '').trim();
+      const cleanTelefone = (telefone || '').trim();
+
+      if (!cleanUsername || !cleanTelefone || !senha) {
+        sendJson(res, 400, { error: 'Nome de usuário, telefone e senha são obrigatórios.' });
+        return;
+      }
+
+      if (cleanUsername.length < 3) {
+        sendJson(res, 400, { error: 'O nome de usuário deve conter no mínimo 3 caracteres.' });
+        return;
+      }
+
+      // Validação de formato de nome de usuário (letras, números, underscore, hífen)
+      if (!/^[a-zA-Z0-9_.-]+$/.test(cleanUsername)) {
+        sendJson(res, 400, { error: 'O nome de usuário não pode conter espaços ou caracteres especiais.' });
+        return;
+      }
+
+      // Validação de confirmação de senha
+      if (confirmarSenha !== undefined && senha !== confirmarSenha) {
+        sendJson(res, 400, { error: 'A confirmação de senha não coincide com a senha digitada.' });
         return;
       }
 
@@ -365,14 +385,30 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const existing = db.findUserByEmail(email);
-      if (existing) {
-        sendJson(res, 409, { error: 'Este e-mail já está cadastrado.' });
+      // Verificação de unicidade do nome de usuário
+      const existingUser = db.findUserByUsername(cleanUsername);
+      if (existingUser) {
+        sendJson(res, 409, { error: 'Este nome de usuário já está em uso. Por favor, escolha outro.' });
         return;
       }
 
+      if (email) {
+        const existingEmail = db.findUserByEmail(email);
+        if (existingEmail) {
+          sendJson(res, 409, { error: 'Este e-mail já está cadastrado.' });
+          return;
+        }
+      }
+
       const senhaHash = hashPassword(senha);
-      const user = db.createUser({ nome, email, senhaHash, cpf });
+      const user = db.createUser({ 
+        username: cleanUsername, 
+        nome: nome || cleanUsername, 
+        telefone: cleanTelefone, 
+        email, 
+        senhaHash, 
+        cpf 
+      });
 
       // Cria a sessão com limite de 1 tela por padrão (até assinar plano de 2 telas)
       const session = db.createSession(user.id, deviceId, deviceInfo, user.limiteTelas || 1);
@@ -391,20 +427,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // --- Login de Usuário com Limite de Telas ---
+  // --- Login de Usuário (por Nome de Usuário ou E-mail) com Limite de Telas ---
   if (pathname === '/api/auth/login' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      const { email, senha, deviceId, deviceInfo } = body;
+      const login = (body.username || body.login || body.email || '').trim();
+      const senha = body.senha;
+      const { deviceId, deviceInfo } = body;
 
-      if (!email || !senha) {
-        sendJson(res, 400, { error: 'E-mail e senha são obrigatórios.' });
+      if (!login || !senha) {
+        sendJson(res, 400, { error: 'Usuário e senha são obrigatórios.' });
         return;
       }
 
-      const user = db.findUserByEmail(email);
+      const user = db.findUserByLogin(login);
       if (!user || !verifyPassword(senha, user.senhaHash)) {
-        sendJson(res, 401, { error: 'E-mail ou senha incorretos.' });
+        sendJson(res, 401, { error: 'Nome de usuário ou senha incorretos.' });
         return;
       }
 

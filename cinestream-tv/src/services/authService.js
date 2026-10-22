@@ -69,14 +69,24 @@ export async function fetchPlans() {
   return [];
 }
 
-export async function registerUser({ nome, email, senha, cpf }) {
+export async function registerUser({ username, telefone, senha, confirmarSenha, email, nome, cpf }) {
   const deviceId = getDeviceId();
   const deviceInfo = getDeviceInfo();
 
   const res = await fetch('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome, email, senha, cpf, deviceId, deviceInfo })
+    body: JSON.stringify({ 
+      username, 
+      telefone, 
+      senha, 
+      confirmarSenha, 
+      email, 
+      nome, 
+      cpf, 
+      deviceId, 
+      deviceInfo 
+    })
   });
 
   const data = await res.json();
@@ -88,14 +98,19 @@ export async function registerUser({ nome, email, senha, cpf }) {
   return data;
 }
 
-export async function loginUser({ email, senha }) {
+export async function loginUser({ username, email, senha }) {
   const deviceId = getDeviceId();
   const deviceInfo = getDeviceInfo();
 
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, senha, deviceId, deviceInfo })
+    body: JSON.stringify({ 
+      username: username || email, 
+      senha, 
+      deviceId, 
+      deviceInfo 
+    })
   });
 
   const data = await res.json();
