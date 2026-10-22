@@ -5,6 +5,18 @@ import zlib from 'node:zlib';
 import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
+import { db } from './db.js';
+import { 
+  PLANS, 
+  hashPassword, 
+  verifyPassword, 
+  generateToken, 
+  verifyToken, 
+  sanitizeUser, 
+  isUserSubscriptionActive 
+} from './authService.js';
+import { mercadoPagoService } from './mercadoPagoService.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -36,6 +48,49 @@ const MIME_TYPES = {
 
 const DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
+function sendJson(res, statusCode, data) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+    'Access-Control-Allow-Headers': '*'
+  });
+  res.end(JSON.stringify(data));
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk;
+      if (body.length > 1e6) { // 1MB limite
+        req.destroy();
+        reject(new Error('Payload too large'));
+      }
+    });
+    req.on('end', () => {
+      if (!body) return resolve({});
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        reject(new Error('Invalid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function authenticateUser(req) {
+  const authHeader = req.headers['authorization'] || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  const payload = verifyToken(token);
+  if (!payload || !payload.userId) return null;
+  const user = db.findUserById(payload.userId);
+  if (!user) return null;
+  return { user, payload };
+}
+
 /**
  * Reescreve o manifesto M3U8 para que todas as URLs relativas ou absolutas
  * (sub-playlists, chaves de criptografia e segmentos .ts) passem pelo /api/proxy
@@ -48,7 +103,6 @@ function rewriteM3U8(content, baseUrl, proxyBase) {
 
     // Linha de diretiva/tag HLS
     if (trimmed.startsWith('#')) {
-      // Reescreve tags com URI="...", como #EXT-X-KEY, #EXT-X-MAP, #EXT-X-MEDIA
       return trimmed.replace(/URI="([^"]+)"/g, (match, uri) => {
         try {
           const abs = new URL(uri, baseUrl).href;
@@ -74,8 +128,7 @@ function rewriteM3U8(content, baseUrl, proxyBase) {
  */
 async function handleProxy(req, res, targetUrl, customReferer, customUa) {
   if (!targetUrl) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Missing url parameter' }));
+    sendJson(res, 400, { error: 'Missing url parameter' });
     return;
   }
 
@@ -83,8 +136,7 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
   try {
     parsedTarget = new URL(targetUrl);
   } catch {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Invalid target URL' }));
+    sendJson(res, 400, { error: 'Invalid target URL' });
     return;
   }
 
@@ -100,7 +152,6 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
     reqHeaders['Origin'] = parsedTarget.origin;
   }
 
-  // Encaminha Range se cliente pediu (seek de VOD)
   if (req.headers['range']) {
     reqHeaders['Range'] = req.headers['range'];
   }
@@ -114,7 +165,6 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
     });
   } catch (primaryErr) {
     console.warn(`Upstream direto falhou para ${targetUrl}: ${primaryErr.message}. Tentando fallback secundário...`);
-    // Fallback secundário usando o proxy do saimo-tv caso o servidor bloqueie nosso IP
     if (!targetUrl.includes('pages.dev')) {
       try {
         const fallbackUrl = `https://saimo-tv.pages.dev/api/proxy?url=${encodeURIComponent(targetUrl)}${customReferer ? `&referer=${encodeURIComponent(customReferer)}` : ''}`;
@@ -123,21 +173,17 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
           headers: { 'User-Agent': customUa || DEFAULT_UA },
           redirect: 'follow'
         });
-      } catch (fallbackErr) {
-        res.writeHead(502, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Proxy upstream failed', details: primaryErr.message }));
+      } catch {
+        sendJson(res, 502, { error: 'Proxy upstream failed', details: primaryErr.message });
         return;
       }
     } else {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Proxy upstream failed', details: primaryErr.message }));
+      sendJson(res, 502, { error: 'Proxy upstream failed', details: primaryErr.message });
       return;
     }
   }
 
-  // Verifica se o upstream retornou erro impeditivo
   if (!upstreamRes.ok && upstreamRes.status >= 400 && upstreamRes.status !== 404) {
-    // Tenta fallback se status for 403 / 502 / 503
     if (!targetUrl.includes('pages.dev')) {
       try {
         const fallbackUrl = `https://saimo-tv.pages.dev/api/proxy?url=${encodeURIComponent(targetUrl)}${customReferer ? `&referer=${encodeURIComponent(customReferer)}` : ''}`;
@@ -146,9 +192,7 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
           headers: { 'User-Agent': customUa || DEFAULT_UA },
           redirect: 'follow'
         });
-        if (fbRes.ok) {
-          upstreamRes = fbRes;
-        }
+        if (fbRes.ok) upstreamRes = fbRes;
       } catch (_) {}
     }
   }
@@ -163,7 +207,6 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
 
   if (isM3U8) {
     const text = await upstreamRes.text();
-    // Se o texto parecer manifesto HLS, reescreve
     if (text.includes('#EXTM3U') || text.includes('#EXT-X-')) {
       const rewritten = rewriteM3U8(text, finalUrl, '/api/proxy');
       res.writeHead(upstreamRes.status, {
@@ -215,7 +258,6 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
       res.write(value);
     }
   } catch (_) {
-    // Client cancelou ou upstream encerrou
   } finally {
     res.end();
   }
@@ -230,7 +272,6 @@ function serveStatic(req, res, pathname) {
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
-      // SPA Fallback: serve dist/index.html
       filePath = path.join(DIST_DIR, 'index.html');
       fs.stat(filePath, (err2, stats2) => {
         if (err2 || !stats2.isFile()) {
@@ -282,10 +323,9 @@ function streamFile(req, res, filePath, ext, stats) {
   }
 }
 
-const server = http.createServer((req, res) => {
-  // Configuração global de CORS
+const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
 
   if (req.method === 'OPTIONS') {
@@ -297,14 +337,322 @@ const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
 
-  // Endpoint de health check
+  // --- Endpoints Básicos ---
   if (pathname === '/health' || pathname === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
+    sendJson(res, 200, { status: 'ok', uptime: process.uptime() });
     return;
   }
 
-  // Endpoint oficial de Proxy HLS
+  // --- Planos Disponíveis ---
+  if (pathname === '/api/auth/plans' && req.method === 'GET') {
+    sendJson(res, 200, { plans: Object.values(PLANS) });
+    return;
+  }
+
+  // --- Cadastro de Usuário ---
+  if (pathname === '/api/auth/register' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const { nome, email, senha, cpf, deviceId, deviceInfo } = body;
+
+      if (!nome || !email || !senha) {
+        sendJson(res, 400, { error: 'Nome, e-mail e senha são obrigatórios.' });
+        return;
+      }
+
+      if (senha.length < 6) {
+        sendJson(res, 400, { error: 'A senha deve conter no mínimo 6 caracteres.' });
+        return;
+      }
+
+      const existing = db.findUserByEmail(email);
+      if (existing) {
+        sendJson(res, 409, { error: 'Este e-mail já está cadastrado.' });
+        return;
+      }
+
+      const senhaHash = hashPassword(senha);
+      const user = db.createUser({ nome, email, senhaHash, cpf });
+
+      // Cria a sessão com limite de 1 tela por padrão (até assinar plano de 2 telas)
+      const session = db.createSession(user.id, deviceId, deviceInfo, user.limiteTelas || 1);
+      const token = generateToken({ userId: user.id, sessionId: session.id });
+
+      sendJson(res, 201, {
+        token,
+        sessionId: session.id,
+        user: sanitizeUser(user),
+        message: 'Cadastro realizado com sucesso!'
+      });
+    } catch (err) {
+      console.error('Erro no cadastro:', err);
+      sendJson(res, 500, { error: 'Erro ao processar cadastro: ' + err.message });
+    }
+    return;
+  }
+
+  // --- Login de Usuário com Limite de Telas ---
+  if (pathname === '/api/auth/login' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const { email, senha, deviceId, deviceInfo } = body;
+
+      if (!email || !senha) {
+        sendJson(res, 400, { error: 'E-mail e senha são obrigatórios.' });
+        return;
+      }
+
+      const user = db.findUserByEmail(email);
+      if (!user || !verifyPassword(senha, user.senhaHash)) {
+        sendJson(res, 401, { error: 'E-mail ou senha incorretos.' });
+        return;
+      }
+
+      // Regra de telas simultâneas:
+      // Se plano tem 1 tela: desconecta qualquer outro dispositivo logado.
+      // Se plano tem 2 telas: se já houver 2 telas, desconecta a mais antiga.
+      const maxScreens = user.limiteTelas || 1;
+      const session = db.createSession(user.id, deviceId, deviceInfo, maxScreens);
+      const token = generateToken({ userId: user.id, sessionId: session.id });
+
+      sendJson(res, 200, {
+        token,
+        sessionId: session.id,
+        user: sanitizeUser(user),
+        message: 'Login realizado com sucesso!'
+      });
+    } catch (err) {
+      console.error('Erro no login:', err);
+      sendJson(res, 500, { error: 'Erro ao processar login: ' + err.message });
+    }
+    return;
+  }
+
+  // --- Obter Usuário Atual (Me) ---
+  if (pathname === '/api/auth/me' && req.method === 'GET') {
+    const auth = authenticateUser(req);
+    if (!auth) {
+      sendJson(res, 401, { error: 'Não autenticado.' });
+      return;
+    }
+    sendJson(res, 200, { user: sanitizeUser(auth.user) });
+    return;
+  }
+
+  // --- Heartbeat de Sessão (Monitor de Desconexão por limite de telas) ---
+  if (pathname === '/api/auth/heartbeat' && req.method === 'POST') {
+    const auth = authenticateUser(req);
+    if (!auth) {
+      sendJson(res, 401, { error: 'UNAUTHORIZED' });
+      return;
+    }
+
+    try {
+      const body = await readJsonBody(req);
+      const sessionId = body.sessionId || auth.payload.sessionId;
+
+      const check = db.heartbeatSession(sessionId);
+      if (!check.valid) {
+        sendJson(res, 403, { 
+          error: 'SESSION_TERMINATED', 
+          reason: check.reason === 'LOGGED_IN_ANOTHER_DEVICE'
+            ? 'Sua conta atingiu o limite de telas simultâneas e foi conectada em outro dispositivo.'
+            : 'Sua sessão foi encerrada.'
+        });
+        return;
+      }
+
+      sendJson(res, 200, { 
+        status: 'active', 
+        user: sanitizeUser(auth.user) 
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // --- Logout ---
+  if (pathname === '/api/auth/logout' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const auth = authenticateUser(req);
+      const sessionId = body.sessionId || auth?.payload?.sessionId;
+      if (sessionId) db.terminateSession(sessionId);
+      sendJson(res, 200, { message: 'Logout efetuado.' });
+    } catch {
+      sendJson(res, 200, { message: 'Logout efetuado.' });
+    }
+    return;
+  }
+
+  // --- Criar Pagamento Pix no Mercado Pago ---
+  if (pathname === '/api/pagamentos/pix' && req.method === 'POST') {
+    const auth = authenticateUser(req);
+    if (!auth) {
+      sendJson(res, 401, { error: 'Você precisa estar logado para assinar um plano.' });
+      return;
+    }
+
+    try {
+      const body = await readJsonBody(req);
+      const { planId } = body;
+      const plano = PLANS[planId];
+
+      if (!plano) {
+        sendJson(res, 400, { error: 'Plano inválido ou não encontrado.' });
+        return;
+      }
+
+      const mpResponse = await mercadoPagoService.criarPagamentoPix(auth.user, plano);
+      const mpId = mpResponse.id;
+      const td = mpResponse.point_of_interaction?.transaction_data || {};
+      const qrCode = td.qr_code || '';
+      const qrCodeBase64 = td.qr_code_base64 || '';
+
+      const novoPagamento = db.createPagamento({
+        userId: auth.user.id,
+        mercadoPagoId: mpId,
+        planoId: plano.id,
+        valor: plano.valor,
+        status: 'PENDING',
+        qrCode,
+        qrCodeBase64
+      });
+
+      sendJson(res, 201, {
+        paymentId: novoPagamento.id,
+        mercadoPagoId: mpId,
+        plano,
+        valor: plano.valor,
+        qrCode,
+        qrCodeBase64,
+        status: 'PENDING'
+      });
+    } catch (err) {
+      console.error('Erro ao gerar Pix no Mercado Pago:', err);
+      sendJson(res, 500, { error: 'Erro ao gerar cobrança Pix: ' + err.message });
+    }
+    return;
+  }
+
+  // --- Consultar Status do Pagamento Pix ---
+  const matchStatus = pathname.match(/^\/api\/pagamentos\/status\/([^/]+)$/);
+  if (matchStatus && req.method === 'GET') {
+    const paymentId = matchStatus[1];
+    const pagamento = db.findPagamentoById(paymentId) || db.findPagamentoByMercadoPagoId(paymentId);
+
+    if (!pagamento) {
+      sendJson(res, 404, { error: 'Pagamento não encontrado.' });
+      return;
+    }
+
+    // Se já estiver aprovado no banco, retorna imediatamente
+    if (pagamento.status === 'APPROVED') {
+      const user = db.findUserById(pagamento.userId);
+      sendJson(res, 200, { status: 'APPROVED', user: sanitizeUser(user) });
+      return;
+    }
+
+    try {
+      if (pagamento.mercadoPagoId) {
+        const mpStatus = await mercadoPagoService.consultarStatusPagamento(pagamento.mercadoPagoId);
+        if (mpStatus && mpStatus.status === 'approved') {
+          db.updatePagamento(pagamento.id, {
+            status: 'APPROVED',
+            dataConfirmacao: new Date().toISOString()
+          });
+
+          const plano = PLANS[pagamento.planoId];
+          const duracaoDias = plano ? plano.duracaoDias : 30;
+          const limiteTelas = plano ? plano.telas : 1;
+
+          const user = db.findUserById(pagamento.userId);
+          if (user) {
+            const now = new Date();
+            // Se já tiver assinatura ativa, adiciona os dias ao fim existente
+            const baseDate = (user.assinaturaAtiva && user.fimAssinatura && new Date(user.fimAssinatura) > now)
+              ? new Date(user.fimAssinatura)
+              : now;
+            
+            const novoFim = new Date(baseDate.getTime() + (duracaoDias * 24 * 60 * 60 * 1000));
+
+            db.updateUser(user.id, {
+              assinaturaAtiva: true,
+              planoId: plano ? plano.id : 'tela1-mensal',
+              planoNome: plano ? plano.nome : 'Plano 1 Tela',
+              limiteTelas,
+              dataAssinatura: now.toISOString(),
+              fimAssinatura: novoFim.toISOString()
+            });
+
+            console.log(`✅ Assinatura ativada com sucesso para ${user.email} (${plano?.nome || 'Plano'}) até ${novoFim.toISOString()}`);
+          }
+
+          sendJson(res, 200, { status: 'APPROVED', user: sanitizeUser(user) });
+          return;
+        }
+      }
+
+      sendJson(res, 200, { status: pagamento.status });
+    } catch (err) {
+      console.warn('Aviso ao consultar Mercado Pago:', err.message);
+      sendJson(res, 200, { status: pagamento.status });
+    }
+    return;
+  }
+
+  // --- Webhook Oficial do Mercado Pago ---
+  if (pathname === '/api/pagamentos/webhook' && req.method === 'POST') {
+    try {
+      const payload = await readJsonBody(req);
+      if (payload && (payload.type === 'payment' || payload.action === 'payment.updated')) {
+        const mpId = payload.data?.id || payload.id;
+        if (mpId) {
+          const mpStatus = await mercadoPagoService.consultarStatusPagamento(mpId);
+          if (mpStatus && mpStatus.status === 'approved') {
+            const pagamento = db.findPagamentoByMercadoPagoId(mpId);
+            if (pagamento && pagamento.status !== 'APPROVED') {
+              db.updatePagamento(pagamento.id, {
+                status: 'APPROVED',
+                dataConfirmacao: new Date().toISOString()
+              });
+
+              const plano = PLANS[pagamento.planoId];
+              const duracaoDias = plano ? plano.duracaoDias : 30;
+              const limiteTelas = plano ? plano.telas : 1;
+              const user = db.findUserById(pagamento.userId);
+
+              if (user) {
+                const now = new Date();
+                const baseDate = (user.assinaturaAtiva && user.fimAssinatura && new Date(user.fimAssinatura) > now)
+                  ? new Date(user.fimAssinatura)
+                  : now;
+                const novoFim = new Date(baseDate.getTime() + (duracaoDias * 24 * 60 * 60 * 1000));
+
+                db.updateUser(user.id, {
+                  assinaturaAtiva: true,
+                  planoId: plano ? plano.id : 'tela1-mensal',
+                  planoNome: plano ? plano.nome : 'Plano 1 Tela',
+                  limiteTelas,
+                  dataAssinatura: now.toISOString(),
+                  fimAssinatura: novoFim.toISOString()
+                });
+                console.log(`✅ Webhook: Assinatura aprovada para ${user.email}`);
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Erro no webhook:', err.message);
+    }
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  // --- Endpoint oficial de Proxy HLS ---
   if (pathname === '/api/proxy') {
     const targetUrl = parsedUrl.searchParams.get('url');
     const customReferer = parsedUrl.searchParams.get('referer');
@@ -313,7 +661,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Rota legada /stream-proxy/(http|https)/... para compatibilidade
+  // --- Rota legada /stream-proxy/(http|https)/... para compatibilidade ---
   const legacyMatch = pathname.match(/^\/stream-proxy\/(https?)[/:]+([^/]+)\/?(.*)$/i);
   if (legacyMatch) {
     const proto = legacyMatch[1];
@@ -325,7 +673,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Servir arquivos estáticos (SPA React)
+  // --- Servir arquivos estáticos (SPA React) ---
   serveStatic(req, res, pathname);
 });
 

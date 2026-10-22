@@ -10,6 +10,12 @@ import AlphabetNav from './components/AlphabetNav';
 import SportsSection from './components/SportsSection';
 import GlobalSearchModal from './components/GlobalSearchModal';
 import LiveTvView from './components/LiveTvView';
+import AuthModal from './components/AuthModal';
+import PlansModal from './components/PlansModal';
+import PixModal from './components/PixModal';
+import SessionTerminatedModal from './components/SessionTerminatedModal';
+
+import { getAuthUser, logoutUser, checkHeartbeat } from './services/authService';
 
 import { getChannels, getCategories } from './services/channelsService';
 import { 
@@ -43,6 +49,14 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  // Auth & Subscription State
+  const [currentUser, setCurrentUser] = useState(() => getAuthUser());
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [plansModalOpen, setPlansModalOpen] = useState(false);
+  const [pixModalData, setPixModalData] = useState(null);
+  const [sessionKickedOpen, setSessionKickedOpen] = useState(false);
+  const [sessionKickedReason, setSessionKickedReason] = useState('');
 
   // Channels state
   const [channels, setChannels] = useState([]);
@@ -82,6 +96,35 @@ export default function App() {
     window.addEventListener('cinestream_favorites_updated', handleFavUpdate);
     return () => window.removeEventListener('cinestream_favorites_updated', handleFavUpdate);
   }, []);
+
+  // Monitorar autenticação e desconexão de telas simultâneas
+  useEffect(() => {
+    const handleAuthChange = (e) => setCurrentUser(e.detail?.user || null);
+    const handleSessionKicked = (e) => {
+      setCurrentUser(null);
+      setSessionKickedReason(e.detail?.reason || 'Sua conta atingiu o limite de telas simultâneas e foi conectada em outro dispositivo.');
+      setSessionKickedOpen(true);
+      setActiveStreamItem(null);
+      setSelectedLiveChannel(null);
+    };
+
+    window.addEventListener('cinestream_auth_changed', handleAuthChange);
+    window.addEventListener('cinestream_session_terminated', handleSessionKicked);
+
+    return () => {
+      window.removeEventListener('cinestream_auth_changed', handleAuthChange);
+      window.removeEventListener('cinestream_session_terminated', handleSessionKicked);
+    };
+  }, []);
+
+  // Heartbeat periódico (a cada 20s) para detecção instantânea de sessão ativa
+  useEffect(() => {
+    if (!currentUser) return;
+    const interval = setInterval(() => {
+      checkHeartbeat();
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   // Keyboard shortcut Ctrl+K for search
   useEffect(() => {
@@ -146,8 +189,16 @@ export default function App() {
     }
   }, [activeTab, currentLetter]);
 
-  // Handle Play Action
+  // Handle Play Action with Subscription Protection
   const handlePlayMedia = async (item, episode = null, allEpisodes = null) => {
+    if (!currentUser) {
+      setAuthModalOpen(true);
+      return;
+    }
+    if (!currentUser.assinaturaAtiva) {
+      setPlansModalOpen(true);
+      return;
+    }
     const resolved = await resolveMediaItem(item);
     setActiveStreamItem(resolved);
     setCurrentEpisode(episode);
@@ -156,6 +207,14 @@ export default function App() {
   };
 
   const handlePlayChannel = (channel) => {
+    if (!currentUser) {
+      setAuthModalOpen(true);
+      return;
+    }
+    if (!currentUser.assinaturaAtiva) {
+      setPlansModalOpen(true);
+      return;
+    }
     setSelectedLiveChannel(channel);
     setActiveTab('channels');
   };
@@ -193,6 +252,10 @@ export default function App() {
         setActiveTab={setActiveTab} 
         onOpenSearch={() => setSearchModalOpen(true)}
         favoriteCount={favoriteCount}
+        currentUser={currentUser}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenPlans={() => setPlansModalOpen(true)}
+        onLogout={logoutUser}
       />
 
       {/* Main Content Area */}
@@ -314,6 +377,9 @@ export default function App() {
               favs={favs}
               onToggleFav={handleToggleFav}
               initialChannel={selectedLiveChannel}
+              currentUser={currentUser}
+              onRequireAuth={() => setAuthModalOpen(true)}
+              onRequireSubscription={() => setPlansModalOpen(true)}
             />
           </div>
         )}
@@ -544,6 +610,51 @@ export default function App() {
           onSwitchEpisode={handleNextEpisode}
         />
       )}
+
+      {/* Auth Modal (Login / Cadastro) */}
+      <AuthModal 
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+          if (!user.assinaturaAtiva) {
+            setPlansModalOpen(true);
+          }
+        }}
+      />
+
+      {/* Plans Modal (Escolha de Planos de 1 e 2 telas) */}
+      <PlansModal 
+        isOpen={plansModalOpen}
+        onClose={() => setPlansModalOpen(false)}
+        currentUser={currentUser}
+        onRequireAuth={() => setAuthModalOpen(true)}
+        onPixGenerated={(data) => setPixModalData(data)}
+      />
+
+      {/* Pix Payment Modal (QR Code & Copia e Cola com polling do Mercado Pago) */}
+      <PixModal 
+        isOpen={!!pixModalData}
+        pixData={pixModalData}
+        onClose={() => setPixModalData(null)}
+        onSuccess={(updatedUser) => {
+          setCurrentUser(updatedUser);
+        }}
+      />
+
+      {/* Session Terminated Modal (Aviso de limite de telas / outro dispositivo logado) */}
+      <SessionTerminatedModal 
+        isOpen={sessionKickedOpen}
+        reason={sessionKickedReason}
+        onReLogin={() => {
+          setSessionKickedOpen(false);
+          setAuthModalOpen(true);
+        }}
+        onUpgradePlans={() => {
+          setSessionKickedOpen(false);
+          setPlansModalOpen(true);
+        }}
+      />
     </div>
   );
 }

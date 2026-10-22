@@ -14,9 +14,10 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
-# Copiar arquivos compilados e script do servidor
+# Copiar arquivos compilados e scripts do servidor
 COPY --from=build /app/dist ./dist
-COPY server.js ./
+COPY server.js db.js authService.js mercadoPagoService.js ./
+RUN mkdir -p /app/data
 
 ENV PORT=3000
 ENV NODE_ENV=production

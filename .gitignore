@@ -1,0 +1,7 @@
+node_modules/
+cinestream-tv/node_modules/
+cinestream-tv/dist/
+data/database.json
+data/*.tmp
+*.log
+.env

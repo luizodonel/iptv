@@ -66,7 +66,10 @@ export default function LiveTvView({
   channels = [], 
   favs = { channels: [] }, 
   onToggleFav,
-  initialChannel = null
+  initialChannel = null,
+  currentUser = null,
+  onRequireAuth,
+  onRequireSubscription
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -213,6 +216,18 @@ export default function LiveTvView({
   const loadStream = useCallback((url, source = null) => {
     if (!url || !videoRef.current) return;
 
+    if (!currentUser) {
+      setIsLoading(false);
+      setErrorMsg('Faça login para assistir aos canais ao vivo.');
+      return;
+    }
+
+    if (!currentUser.assinaturaAtiva) {
+      setIsLoading(false);
+      setErrorMsg('Assinatura necessária para liberar os canais.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMsg('');
     setAutoplayBlocked(false);
@@ -294,7 +309,7 @@ export default function LiveTvView({
       video.load();
       attemptPlay();
     }
-  }, [handleFailover, sources.length]);
+  }, [handleFailover, sources.length, currentUser]);
 
   useEffect(() => {
     if (streamUrl) {
@@ -713,9 +728,18 @@ export default function LiveTvView({
               {errorMsg && (
                 <div className="livetv-screen-error">
                   <AlertCircle size={44} color="#ef4444" />
-                  <h3>Erro na Transmissão</h3>
+                  <h3>{(!currentUser || !currentUser.assinaturaAtiva) ? 'Acesso Restrito' : 'Erro na Transmissão'}</h3>
                   <p>{errorMsg}</p>
-                  {sources.length > 1 && (
+                  {(!currentUser || !currentUser.assinaturaAtiva) ? (
+                    <button 
+                      type="button"
+                      className="btn-glow-primary"
+                      style={{ marginTop: 14, padding: '12px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}
+                      onClick={() => !currentUser ? onRequireAuth && onRequireAuth() : onRequireSubscription && onRequireSubscription()}
+                    >
+                      {!currentUser ? 'Entrar ou Criar Conta' : 'Escolher um Plano'}
+                    </button>
+                  ) : sources.length > 1 && (
                     <button 
                       className="btn-retry-livetv"
                       onClick={() => {
