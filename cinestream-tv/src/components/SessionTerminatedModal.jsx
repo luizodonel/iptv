@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { MonitorX, AlertTriangle, ArrowRight, Sparkles, LogIn } from 'lucide-react';
 
 export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUpgradePlans }) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (

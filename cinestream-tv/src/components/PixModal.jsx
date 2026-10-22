@@ -60,8 +60,11 @@ export default function PixModal({ pixData, isOpen, onClose, onSuccess }) {
 
     pollingRef.current = setInterval(check, 2500);
 
+    document.body.style.overflow = 'hidden';
+
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
+      document.body.style.overflow = '';
     };
   }, [isOpen, paymentId, isApproved, onSuccess]);
 

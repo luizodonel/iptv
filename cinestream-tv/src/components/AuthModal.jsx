@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Lock, User, Eye, EyeOff, Sparkles, AlertCircle, Phone, CheckCircle2 } from 'lucide-react';
 import { loginUser, registerUser } from '../services/authService';
 
@@ -12,6 +12,20 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Sincroniza o modo e reseta campos sempre que a modal for aberta
+  useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode || 'login');
+      setErrorMsg('');
+      setSenha('');
+      setConfirmarSenha('');
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
 

@@ -53,6 +53,7 @@ export default function App() {
   // Auth & Subscription State
   const [currentUser, setCurrentUser] = useState(() => getAuthUser());
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState('login');
   const [plansModalOpen, setPlansModalOpen] = useState(false);
   const [pixModalData, setPixModalData] = useState(null);
   const [sessionKickedOpen, setSessionKickedOpen] = useState(false);
@@ -253,7 +254,10 @@ export default function App() {
         onOpenSearch={() => setSearchModalOpen(true)}
         favoriteCount={favoriteCount}
         currentUser={currentUser}
-        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenAuth={(mode = 'login') => {
+          setAuthModalMode(mode);
+          setAuthModalOpen(true);
+        }}
         onOpenPlans={() => setPlansModalOpen(true)}
         onLogout={logoutUser}
       />
@@ -614,6 +618,7 @@ export default function App() {
       {/* Auth Modal (Login / Cadastro) */}
       <AuthModal 
         isOpen={authModalOpen}
+        initialMode={authModalMode}
         onClose={() => setAuthModalOpen(false)}
         onAuthSuccess={(user) => {
           setCurrentUser(user);
@@ -628,7 +633,10 @@ export default function App() {
         isOpen={plansModalOpen}
         onClose={() => setPlansModalOpen(false)}
         currentUser={currentUser}
-        onRequireAuth={() => setAuthModalOpen(true)}
+        onRequireAuth={() => {
+          setAuthModalMode('register');
+          setAuthModalOpen(true);
+        }}
         onPixGenerated={(data) => setPixModalData(data)}
       />
 
