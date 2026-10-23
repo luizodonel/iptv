@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import { toSafeStreamUrl, SafeStreamLoader } from '../services/proxyService';
 import { 
@@ -67,8 +67,8 @@ export default function VideoPlayer({
     return '';
   });
 
-  // Collect source URLs
-  const getSourcesList = useCallback(() => {
+  // Collect source URLs - useMemo prevents recreating array/objects on every render
+  const sources = useMemo(() => {
     if (isLive) {
       return item.sources || [];
     }
@@ -87,7 +87,6 @@ export default function VideoPlayer({
     return [];
   }, [item, isLive, isSeries, currentEpisode, selectedVersion]);
 
-  const sources = getSourcesList();
   const [currentSourceIndex, setCurrentSourceIndex] = useState(0);
   const [showSourceMenu, setShowSourceMenu] = useState(false);
   const [showChannelDrawer, setShowChannelDrawer] = useState(false);
@@ -123,6 +122,9 @@ export default function VideoPlayer({
     });
   }, [sources.length, clearSourceTimeout]);
 
+  const handleSourceFailRef = useRef(handleSourceFail);
+  handleSourceFailRef.current = handleSourceFail;
+
   const loadStream = useCallback((url, source = null) => {
     if (!url || !videoRef.current) return;
 
@@ -133,7 +135,7 @@ export default function VideoPlayer({
     // Timeout de 8.5s para failover automático caso a fonte demore
     sourceTimeoutRef.current = setTimeout(() => {
       console.warn('Fonte atual demorou mais de 8.5s para responder. Alternando para a próxima...');
-      handleSourceFail();
+      handleSourceFailRef.current?.();
     }, 8500);
 
     // Cleanup previous HLS instance
@@ -199,13 +201,13 @@ export default function VideoPlayer({
             console.warn('HLS fatal error encountered:', data.details);
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                handleSourceFail();
+                handleSourceFailRef.current?.();
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
                 hls.recoverMediaError();
                 break;
               default:
-                handleSourceFail();
+                handleSourceFailRef.current?.();
                 break;
             }
           }
@@ -246,16 +248,17 @@ export default function VideoPlayer({
           setIsLoading(false);
         });
     }
-  }, [handleSourceFail, clearSourceTimeout, item.id]);
+  }, [clearSourceTimeout, item.id]);
 
   useEffect(() => {
-    if (streamUrl) {
-      loadStream(streamUrl, activeSource);
-    } else {
+    if (!streamUrl) {
       clearSourceTimeout();
       setIsLoading(false);
       setErrorMsg('Nenhuma URL de transmissão válida encontrada para este item.');
+      return;
     }
+
+    loadStream(streamUrl, activeSource);
 
     return () => {
       clearSourceTimeout();
@@ -264,7 +267,7 @@ export default function VideoPlayer({
         hlsRef.current = null;
       }
     };
-  }, [streamUrl, activeSource, loadStream, clearSourceTimeout]);
+  }, [streamUrl, loadStream, clearSourceTimeout]);
 
   // Video event listeners
   const onTimeUpdate = () => {
