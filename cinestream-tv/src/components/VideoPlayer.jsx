@@ -35,6 +35,7 @@ export default function VideoPlayer({
   const hlsRef = useRef(null);
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
+  const sourceTimeoutRef = useRef(null);
 
   // Stream state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -101,7 +102,15 @@ export default function VideoPlayer({
   const activeSource = sources[currentSourceIndex] || null;
   const streamUrl = typeof activeSource === 'string' ? activeSource : activeSource?.url;
 
+  const clearSourceTimeout = useCallback(() => {
+    if (sourceTimeoutRef.current) {
+      clearTimeout(sourceTimeoutRef.current);
+      sourceTimeoutRef.current = null;
+    }
+  }, []);
+
   const handleSourceFail = useCallback(() => {
+    clearSourceTimeout();
     setCurrentSourceIndex(prevIdx => {
       const nextIdx = prevIdx + 1;
       if (nextIdx < sources.length) {
@@ -112,13 +121,20 @@ export default function VideoPlayer({
       setErrorMsg('Todas as fontes deste conteúdo falharam ou estão indisponíveis no momento.');
       return prevIdx;
     });
-  }, [sources.length]);
+  }, [sources.length, clearSourceTimeout]);
 
   const loadStream = useCallback((url, source = null) => {
     if (!url || !videoRef.current) return;
 
     setIsLoading(true);
     setErrorMsg('');
+    clearSourceTimeout();
+
+    // Timeout de 8.5s para failover automático caso a fonte demore
+    sourceTimeoutRef.current = setTimeout(() => {
+      console.warn('Fonte atual demorou mais de 8.5s para responder. Alternando para a próxima...');
+      handleSourceFail();
+    }, 8500);
 
     // Cleanup previous HLS instance
     if (hlsRef.current) {
@@ -169,12 +185,17 @@ export default function VideoPlayer({
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          clearSourceTimeout();
           setIsLoading(false);
-          video.play().catch(() => setIsPlaying(false));
+          video.play().catch(() => {
+            setIsPlaying(false);
+            setIsLoading(false);
+          });
         });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
+            clearSourceTimeout();
             console.warn('HLS fatal error encountered:', data.details);
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
@@ -192,8 +213,13 @@ export default function VideoPlayer({
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS (Safari/iOS)
         video.src = safeUrl;
-        video.play().catch(() => setIsPlaying(false));
+        video.play().catch(() => {
+          clearSourceTimeout();
+          setIsPlaying(false);
+          setIsLoading(false);
+        });
       } else {
+        clearSourceTimeout();
         setErrorMsg('Seu navegador não suporta reprodução HLS nativa.');
       }
     } else {
@@ -207,25 +233,38 @@ export default function VideoPlayer({
         video.currentTime = savedTime;
       }
 
-      video.play().catch(() => setIsPlaying(false));
+      video.play()
+        .then(() => {
+          clearSourceTimeout();
+          setIsPlaying(true);
+          setIsLoading(false);
+        })
+        .catch(err => {
+          console.warn('Autoplay bloqueado pelo navegador, aguardando interação do usuário:', err);
+          clearSourceTimeout();
+          setIsPlaying(false);
+          setIsLoading(false);
+        });
     }
-  }, [handleSourceFail, item.id]);
+  }, [handleSourceFail, clearSourceTimeout, item.id]);
 
   useEffect(() => {
     if (streamUrl) {
       loadStream(streamUrl, activeSource);
     } else {
+      clearSourceTimeout();
       setIsLoading(false);
       setErrorMsg('Nenhuma URL de transmissão válida encontrada para este item.');
     }
 
     return () => {
+      clearSourceTimeout();
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [streamUrl, activeSource, loadStream]);
+  }, [streamUrl, activeSource, loadStream, clearSourceTimeout]);
 
   // Video event listeners
   const onTimeUpdate = () => {
@@ -502,15 +541,24 @@ export default function VideoPlayer({
         className={`main-video-element fit-${fitMode}`}
         playsInline
         onTimeUpdate={onTimeUpdate}
-        onLoadedMetadata={() => setIsLoading(false)}
-        onCanPlay={() => setIsLoading(false)}
-        onLoadedData={() => setIsLoading(false)}
+        onLoadedMetadata={() => { clearSourceTimeout(); setIsLoading(false); }}
+        onCanPlay={() => { clearSourceTimeout(); setIsLoading(false); }}
+        onLoadedData={() => { clearSourceTimeout(); setIsLoading(false); }}
         onWaiting={() => setIsLoading(true)}
-        onPlaying={() => { setIsLoading(false); setIsPlaying(true); }}
+        onPlaying={() => { clearSourceTimeout(); setIsLoading(false); setIsPlaying(true); }}
         onPause={() => setIsPlaying(false)}
-        onError={handleSourceFail}
+        onError={() => { clearSourceTimeout(); handleSourceFail(); }}
         onClick={togglePlay}
       />
+
+      {/* Center Play Button when paused and not loading */}
+      {!isPlaying && !isLoading && !errorMsg && (
+        <div className="center-play-trigger" onClick={togglePlay}>
+          <div className="center-play-circle pulse-hover">
+            <Play size={40} fill="#ffffff" color="#ffffff" />
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification Pill (Ajustar / Preencher Tela) */}
       {toastMsg && (

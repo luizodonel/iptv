@@ -16,7 +16,7 @@ export function toSafeStreamUrl(url, referer = '', userAgent = '') {
   // Em sites HTTPS, URLs HTTP são bloqueadas pelo navegador (Mixed Content).
   // Streams HLS (.m3u8) e fluxos ao vivo também passam pelo proxy para garantir CORS e reescrita de segmentos.
   const isHttp = url.startsWith('http://');
-  const isStream = url.includes('.m3u8') || url.includes('/live/') || url.includes('/auth/');
+  const isStream = url.includes('.m3u8') || url.includes('/live/') || url.includes('/auth/') || url.includes('master.txt');
 
   if (isHttp || isStream) {
     let proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
