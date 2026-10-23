@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import { db } from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'oninha-tv-super-secret-key-2026-xyz987';
+const JWT_SECRET = process.env.JWT_SECRET || 'top-canais-tv-super-secret-key-2026-xyz987';
+const LEGACY_JWT_SECRET = 'oninha-tv-super-secret-key-2026-xyz987';
 
 export const PLANS = {
   'tela1-mensal': {
@@ -78,8 +79,13 @@ export function verifyToken(token) {
 
   const [header, body, signature] = parts;
   const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  let isValid = (signature === expectedSig);
+  if (!isValid) {
+    const legacySig = crypto.createHmac('sha256', LEGACY_JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+    isValid = (signature === legacySig);
+  }
   
-  if (signature !== expectedSig) return null;
+  if (!isValid) return null;
 
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf-8'));

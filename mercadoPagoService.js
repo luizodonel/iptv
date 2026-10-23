@@ -29,14 +29,14 @@ export class MercadoPagoService {
 
     const url = 'https://api.mercadopago.com/v1/payments';
 
-    const rawName = (user.nome || user.username || 'Cliente Oninha').trim();
+    const rawName = (user.nome || user.username || 'Cliente Top Canais').trim();
     const nomeParts = rawName.split(' ');
     const firstName = nomeParts[0] || 'Cliente';
     const lastName = nomeParts.length > 1 ? nomeParts[nomeParts.length - 1] : 'TV';
 
     // Formata o e-mail do pagador
     let email = user.email ? user.email.trim() : '';
-    if (!email || !email.includes('@') || email.endsWith('@oninha.tv')) {
+    if (!email || !email.includes('@') || email.endsWith('@oninha.tv') || email.endsWith('@topcanais.tv')) {
       const cleanUser = (user.username || firstName).toLowerCase().replace(/[^a-z0-9]/g, '');
       email = `${cleanUser || 'cliente'}@gmail.com`;
     }
@@ -60,7 +60,7 @@ export class MercadoPagoService {
 
     const body = {
       transaction_amount: Number(plano.valor.toFixed(2)),
-      description: `Assinatura Oninha TV - ${plano.nome}`,
+      description: `Assinatura Top Canais - ${plano.nome}`,
       payment_method_id: 'pix',
       external_reference: String(user.id),
       payer

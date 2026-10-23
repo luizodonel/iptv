@@ -728,7 +728,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Oninha TV Server rodando na porta ${PORT}`);
+  console.log(`🚀 Top Canais Server rodando na porta ${PORT}`);
   console.log(`📁 Diretório estático: ${DIST_DIR}`);
 });
 

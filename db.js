@@ -275,7 +275,7 @@ class Database {
   createUser(userData) {
     const rawUsername = (userData.username || userData.nome || '').trim();
     const cleanUsername = rawUsername.replace(/\s+/g, '').toLowerCase();
-    const email = userData.email ? userData.email.trim().toLowerCase() : `${cleanUsername}@oninha.tv`;
+    const email = userData.email ? userData.email.trim().toLowerCase() : `${cleanUsername}@topcanais.tv`;
 
     const newUser = {
       id: 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),

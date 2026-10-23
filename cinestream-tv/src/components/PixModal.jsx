@@ -23,7 +23,7 @@ export default function PixModal({ pixData, isOpen, onClose, onSuccess }) {
   const qrCodeText = pixData?.qrCode;
   const paymentId = pixData?.paymentId;
   const valor = pixData?.valor ? Number(pixData.valor).toFixed(2).replace('.', ',') : '0,00';
-  const planoNome = pixData?.plano?.nome || 'Plano Oninha TV';
+  const planoNome = pixData?.plano?.nome || 'Plano Top Canais';
 
   // Countdown timer
   useEffect(() => {

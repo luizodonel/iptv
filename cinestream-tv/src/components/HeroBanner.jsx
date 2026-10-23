@@ -40,7 +40,7 @@ export default function HeroBanner({ featured, onPlay, onSelectMedia }) {
           <h1 className="hero-title">{featured.title || featured.name}</h1>
 
           <p className="hero-overview">
-            {featured.overview || 'Assista em alta resolução com transmissão ultrarrápida no Oninha TV.'}
+            {featured.overview || 'Assista em alta resolução com transmissão ultrarrápida no Top Canais.'}
           </p>
 
           <div className="hero-buttons-row">

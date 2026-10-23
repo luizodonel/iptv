@@ -201,7 +201,7 @@ export default function PlansModal({
               <ShieldCheck size={20} className="text-emerald" />
             </div>
             <div className="sub-banner-info">
-              <span className="sub-title">Você já possui assinatura ativa: <strong>{currentUser.planoNome || 'Plano Oninha TV'}</strong></span>
+              <span className="sub-title">Você já possui assinatura ativa: <strong>{currentUser.planoNome || 'Plano Top Canais'}</strong></span>
               <span className="sub-exp">
                 Válida até {new Date(currentUser.fimAssinatura).toLocaleDateString('pt-BR')} ({currentUser.limiteTelas || 1} tela{currentUser.limiteTelas > 1 ? 's' : ''})
               </span>
