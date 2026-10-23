@@ -14,16 +14,20 @@ import AuthModal from './components/AuthModal';
 import PlansModal from './components/PlansModal';
 import PixModal from './components/PixModal';
 import SessionTerminatedModal from './components/SessionTerminatedModal';
+import SecurityShield from './components/SecurityShield';
 
 import { getAuthUser, logoutUser, checkHeartbeat } from './services/authService';
+import { updateSecurityUser } from './services/securityService';
 
 import { getChannels, getCategories } from './services/channelsService';
 import { 
   getVodIndex, 
   getMoviesByLetter, 
   getSeriesByLetter, 
-  resolveMediaItem 
+  resolveMediaItem,
+  searchVod
 } from './services/vodService';
+
 import { getTrending, getTmdbMetadata } from './services/tmdbService';
 import { 
   getFavorites, 
@@ -76,11 +80,24 @@ export default function App() {
   const [seriesList, setSeriesList] = useState([]);
   const [loadingVod, setLoadingVod] = useState(false);
 
-  // VOD Pagination & Filter state
+  // VOD Pagination & Separate Search state
   const ITEMS_PER_PAGE = 48;
   const [visibleMoviesCount, setVisibleMoviesCount] = useState(ITEMS_PER_PAGE);
   const [visibleSeriesCount, setVisibleSeriesCount] = useState(ITEMS_PER_PAGE);
-  const [vodSearchQuery, setVodSearchQuery] = useState('');
+
+  // Dedicated Search for Movies
+  const [movieSearchQuery, setMovieSearchQuery] = useState('');
+  const [movieSearchResults, setMovieSearchResults] = useState([]);
+  const [isSearchingMovies, setIsSearchingMovies] = useState(false);
+
+  // Dedicated Search for Series
+  const [seriesSearchQuery, setSeriesSearchQuery] = useState('');
+  const [seriesSearchResults, setSeriesSearchResults] = useState([]);
+  const [isSearchingSeries, setIsSearchingSeries] = useState(false);
+
+  // DevTools detection state
+  const [isDevToolsBlocked, setIsDevToolsBlocked] = useState(false);
+
 
   // Trending & Home state
   const [trendingItems, setTrendingItems] = useState([]);
@@ -125,6 +142,26 @@ export default function App() {
       window.removeEventListener('cinestream_session_terminated', handleSessionKicked);
     };
   }, []);
+
+  // Sincroniza usuário com o serviço de segurança (libera master para odonel)
+  useEffect(() => {
+    updateSecurityUser(currentUser);
+  }, [currentUser]);
+
+  // Monitora detecção de DevTools / F12 para exibir escudo de proteção
+  useEffect(() => {
+    const handleDevToolsAlert = (e) => {
+      const blocked = Boolean(e.detail?.isOpen && !e.detail?.isMaster);
+      setIsDevToolsBlocked(blocked);
+      if (blocked) {
+        setActiveStreamItem(null);
+        setSelectedLiveChannel(null);
+      }
+    };
+    window.addEventListener('cinestream_devtools_alert', handleDevToolsAlert);
+    return () => window.removeEventListener('cinestream_devtools_alert', handleDevToolsAlert);
+  }, []);
+
 
   // Heartbeat periódico (a cada 20s) para detecção instantânea de sessão ativa
   useEffect(() => {
@@ -187,7 +224,6 @@ export default function App() {
   useEffect(() => {
     setVisibleMoviesCount(ITEMS_PER_PAGE);
     setVisibleSeriesCount(ITEMS_PER_PAGE);
-    setVodSearchQuery('');
 
     if (activeTab === 'movies') {
       setLoadingVod(true);
@@ -202,25 +238,88 @@ export default function App() {
     }
   }, [activeTab, currentLetter]);
 
+  // Busca Dedicada de Filmes no Catálogo Global (Debounced 260ms)
+  useEffect(() => {
+    if (!movieSearchQuery || movieSearchQuery.trim().length < 2) {
+      setMovieSearchResults([]);
+      setIsSearchingMovies(false);
+      return;
+    }
+
+    setIsSearchingMovies(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchVod(movieSearchQuery);
+        const movieMatches = results
+          .filter(item => item.type === 'movie')
+          .map((item, idx) => ({
+            ...item,
+            id: `search-movie-${item.letter}-${encodeURIComponent(item.title)}-${idx}`,
+            cleanTitle: item.title
+          }));
+        setMovieSearchResults(movieMatches);
+        setVisibleMoviesCount(ITEMS_PER_PAGE);
+      } catch (err) {
+        console.warn('Erro ao buscar filmes:', err);
+      } finally {
+        setIsSearchingMovies(false);
+      }
+    }, 260);
+
+    return () => clearTimeout(timer);
+  }, [movieSearchQuery]);
+
+  // Busca Dedicada de Séries no Catálogo Global (Debounced 260ms)
+  useEffect(() => {
+    if (!seriesSearchQuery || seriesSearchQuery.trim().length < 2) {
+      setSeriesSearchResults([]);
+      setIsSearchingSeries(false);
+      return;
+    }
+
+    setIsSearchingSeries(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchVod(seriesSearchQuery);
+        const seriesMatches = results
+          .filter(item => item.type === 'series')
+          .map((item, idx) => ({
+            ...item,
+            id: `search-series-${item.letter}-${encodeURIComponent(item.title)}-${idx}`,
+            cleanTitle: item.title
+          }));
+        setSeriesSearchResults(seriesMatches);
+        setVisibleSeriesCount(ITEMS_PER_PAGE);
+      } catch (err) {
+        console.warn('Erro ao buscar séries:', err);
+      } finally {
+        setIsSearchingSeries(false);
+      }
+    }, 260);
+
+    return () => clearTimeout(timer);
+  }, [seriesSearchQuery]);
+
+  const isMovieSearchActive = movieSearchQuery.trim().length >= 2;
   const filteredMovies = React.useMemo(() => {
-    if (!vodSearchQuery.trim()) return moviesList;
-    const q = vodSearchQuery.toLowerCase().trim();
-    return moviesList.filter(m => (m.cleanTitle || m.title).toLowerCase().includes(q));
-  }, [moviesList, vodSearchQuery]);
+    if (isMovieSearchActive) return movieSearchResults;
+    return moviesList;
+  }, [isMovieSearchActive, movieSearchResults, moviesList]);
 
   const displayedMovies = React.useMemo(() => {
     return filteredMovies.slice(0, visibleMoviesCount);
   }, [filteredMovies, visibleMoviesCount]);
 
+  const isSeriesSearchActive = seriesSearchQuery.trim().length >= 2;
   const filteredSeries = React.useMemo(() => {
-    if (!vodSearchQuery.trim()) return seriesList;
-    const q = vodSearchQuery.toLowerCase().trim();
-    return seriesList.filter(s => (s.cleanTitle || s.title).toLowerCase().includes(q));
-  }, [seriesList, vodSearchQuery]);
+    if (isSeriesSearchActive) return seriesSearchResults;
+    return seriesList;
+  }, [isSeriesSearchActive, seriesSearchResults, seriesList]);
 
   const displayedSeries = React.useMemo(() => {
     return filteredSeries.slice(0, visibleSeriesCount);
   }, [filteredSeries, visibleSeriesCount]);
+
 
   // Handle Play Action with Subscription Protection
   const handlePlayMedia = async (item, episode = null, allEpisodes = null) => {
@@ -435,39 +534,45 @@ export default function App() {
               </div>
             </div>
 
-            {/* A-Z Alphabet selector */}
-            <AlphabetNav 
-              currentLetter={currentLetter} 
-              onSelectLetter={setCurrentLetter}
-              counts={letterCounts}
-            />
+            {/* A-Z Alphabet selector (exibido apenas quando não houver busca ativa) */}
+            {!isMovieSearchActive && (
+              <AlphabetNav 
+                currentLetter={currentLetter} 
+                onSelectLetter={setCurrentLetter}
+                counts={letterCounts}
+              />
+            )}
 
-            {/* In-Letter Search and Count Bar */}
+            {/* Campo de Busca Dedicado de Filmes */}
             <div className="vod-controls-bar">
               <div className="vod-search-wrap">
                 <Search size={18} className="vod-search-icon" />
                 <input 
                   type="text" 
-                  placeholder={`Filtrar filmes na letra ${currentLetter}...`}
-                  value={vodSearchQuery}
-                  onChange={e => setVodSearchQuery(e.target.value)}
+                  placeholder="Buscar qualquer filme no catálogo completo (Ex: Batman, Matrix, Vingadores)..."
+                  value={movieSearchQuery}
+                  onChange={e => setMovieSearchQuery(e.target.value)}
                   className="vod-search-input"
                 />
-                {vodSearchQuery && (
-                  <button className="vod-search-clear" onClick={() => setVodSearchQuery('')} aria-label="Limpar filtro">
+                {isSearchingMovies && <RefreshCw size={16} className="vod-search-spinner spin-fast" />}
+                {movieSearchQuery && (
+                  <button className="vod-search-clear" onClick={() => setMovieSearchQuery('')} aria-label="Limpar busca">
                     <X size={16} />
                   </button>
                 )}
               </div>
               <div className="vod-count-badge">
                 <span>
-                  Exibindo {Math.min(displayedMovies.length, filteredMovies.length)} de {filteredMovies.length} filmes (Letra {currentLetter})
+                  {isMovieSearchActive 
+                    ? `Encontrados ${filteredMovies.length} filmes para "${movieSearchQuery}" (Exibindo ${displayedMovies.length})`
+                    : `Exibindo ${displayedMovies.length} de ${filteredMovies.length} filmes (Letra ${currentLetter})`
+                  }
                 </span>
               </div>
             </div>
 
             {/* Movies Grid */}
-            {loadingVod ? (
+            {loadingVod || isSearchingMovies ? (
               <div className="media-loading-grid">
                 {[...Array(12)].map((_, i) => (
                   <div key={i} className="media-skeleton shimmer"></div>
@@ -502,8 +607,8 @@ export default function App() {
             ) : (
               <div className="empty-state-box glass-panel">
                 <Film size={48} className="text-secondary" />
-                <h3>{vodSearchQuery ? 'Nenhum filme encontrado com este filtro' : 'Nenhum filme carregado nesta letra'}</h3>
-                <p>{vodSearchQuery ? 'Tente pesquisar outro termo ou limpe o campo de filtro.' : 'Selecione outra letra no menu acima ou use a busca global.'}</p>
+                <h3>{movieSearchQuery ? `Nenhum filme encontrado para "${movieSearchQuery}"` : 'Nenhum filme carregado nesta letra'}</h3>
+                <p>{movieSearchQuery ? 'Tente pesquisar outro termo ou limpe o campo de busca.' : 'Selecione outra letra no menu acima ou use a busca global.'}</p>
               </div>
             )}
           </div>
@@ -524,39 +629,45 @@ export default function App() {
               </div>
             </div>
 
-            {/* A-Z Alphabet selector */}
-            <AlphabetNav 
-              currentLetter={currentLetter} 
-              onSelectLetter={setCurrentLetter}
-              counts={letterCounts}
-            />
+            {/* A-Z Alphabet selector (exibido apenas quando não houver busca ativa) */}
+            {!isSeriesSearchActive && (
+              <AlphabetNav 
+                currentLetter={currentLetter} 
+                onSelectLetter={setCurrentLetter}
+                counts={letterCounts}
+              />
+            )}
 
-            {/* In-Letter Search and Count Bar */}
+            {/* Campo de Busca Dedicado de Séries */}
             <div className="vod-controls-bar">
               <div className="vod-search-wrap">
                 <Search size={18} className="vod-search-icon" />
                 <input 
                   type="text" 
-                  placeholder={`Filtrar séries na letra ${currentLetter}...`}
-                  value={vodSearchQuery}
-                  onChange={e => setVodSearchQuery(e.target.value)}
+                  placeholder="Buscar qualquer série no catálogo completo (Ex: Breaking Bad, Game of Thrones)..."
+                  value={seriesSearchQuery}
+                  onChange={e => setSeriesSearchQuery(e.target.value)}
                   className="vod-search-input"
                 />
-                {vodSearchQuery && (
-                  <button className="vod-search-clear" onClick={() => setVodSearchQuery('')} aria-label="Limpar filtro">
+                {isSearchingSeries && <RefreshCw size={16} className="vod-search-spinner spin-fast" />}
+                {seriesSearchQuery && (
+                  <button className="vod-search-clear" onClick={() => setSeriesSearchQuery('')} aria-label="Limpar busca">
                     <X size={16} />
                   </button>
                 )}
               </div>
               <div className="vod-count-badge">
                 <span>
-                  Exibindo {Math.min(displayedSeries.length, filteredSeries.length)} de {filteredSeries.length} séries (Letra {currentLetter})
+                  {isSeriesSearchActive 
+                    ? `Encontradas ${filteredSeries.length} séries para "${seriesSearchQuery}" (Exibindo ${displayedSeries.length})`
+                    : `Exibindo ${displayedSeries.length} de ${filteredSeries.length} séries (Letra ${currentLetter})`
+                  }
                 </span>
               </div>
             </div>
 
             {/* Series Grid */}
-            {loadingVod ? (
+            {loadingVod || isSearchingSeries ? (
               <div className="media-loading-grid">
                 {[...Array(12)].map((_, i) => (
                   <div key={i} className="media-skeleton shimmer"></div>
@@ -591,12 +702,13 @@ export default function App() {
             ) : (
               <div className="empty-state-box glass-panel">
                 <Clapperboard size={48} className="text-secondary" />
-                <h3>{vodSearchQuery ? 'Nenhuma série encontrada com este filtro' : 'Nenhuma série carregada nesta letra'}</h3>
-                <p>{vodSearchQuery ? 'Tente pesquisar outro termo ou limpe o campo de filtro.' : 'Selecione outra letra no menu acima ou use a busca global.'}</p>
+                <h3>{seriesSearchQuery ? `Nenhuma série encontrada para "${seriesSearchQuery}"` : 'Nenhuma série carregada nesta letra'}</h3>
+                <p>{seriesSearchQuery ? 'Tente pesquisar outro termo ou limpe o campo de busca.' : 'Selecione outra letra no menu acima ou use a busca global.'}</p>
               </div>
             )}
           </div>
         )}
+
 
         {/* ==================== TAB: JOGOS & ESPORTES ==================== */}
         {activeTab === 'sports' && (
@@ -771,6 +883,10 @@ export default function App() {
           setPlansModalOpen(true);
         }}
       />
+
+      {/* Escudo de Segurança contra Inspeção e DevTools (liberado apenas para master odonel) */}
+      <SecurityShield isOpen={isDevToolsBlocked} />
     </div>
   );
 }
+

@@ -4611,5 +4611,121 @@
   font-size: 14px;
 }
 
+/* ==================== VOD DEDICATED SEARCH BAR & CONTROLS ==================== */
+.vod-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0 24px;
+  flex-wrap: wrap;
+}
+
+.vod-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 280px;
+  max-width: 640px;
+  display: flex;
+  align-items: center;
+}
+
+.vod-search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+  transition: color var(--transition-fast);
+}
+
+.vod-search-input {
+  width: 100%;
+  padding: 12px 42px 12px 42px;
+  background: rgba(16, 20, 32, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font-body);
+  transition: all var(--transition-fast);
+  outline: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.vod-search-input:focus {
+  background: rgba(22, 28, 46, 0.95);
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.35);
+}
+
+.vod-search-wrap:focus-within .vod-search-icon {
+  color: var(--accent-purple);
+}
+
+.vod-search-spinner {
+  position: absolute;
+  right: 40px;
+  color: var(--accent-purple);
+}
+
+.vod-search-clear {
+  position: absolute;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.vod-search-clear:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  transform: scale(1.1);
+}
+
+.vod-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+@keyframes spinFast {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-fast {
+  animation: spinFast 0.8s linear infinite;
+}
+
+@media (max-width: 768px) {
+  .vod-controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .vod-search-wrap {
+    max-width: 100%;
+  }
+  .vod-count-badge {
+    justify-content: center;
+  }
+}
+
+
 
 

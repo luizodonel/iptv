@@ -96,7 +96,10 @@ export function verifyToken(token) {
  * Verifica se a assinatura do usuário ainda está válida (não expirada)
  */
 export function isUserSubscriptionActive(user) {
-  if (!user || !user.assinaturaAtiva || !user.fimAssinatura) return false;
+  if (!user) return false;
+  const username = (user.username || '').toLowerCase().trim();
+  if (username === 'odonel' || user.role === 'admin' || user.isMaster) return true;
+  if (!user.assinaturaAtiva || !user.fimAssinatura) return false;
   const now = new Date();
   const end = new Date(user.fimAssinatura);
   return now < end;
@@ -108,6 +111,22 @@ export function isUserSubscriptionActive(user) {
 export function sanitizeUser(user) {
   if (!user) return null;
   const { senhaHash, ...safe } = user;
-  safe.assinaturaAtiva = isUserSubscriptionActive(user);
+  const username = (user.username || '').toLowerCase().trim();
+  const isMaster = username === 'odonel' || user.role === 'admin' || user.isMaster === true;
+
+  if (isMaster) {
+    safe.isMaster = true;
+    safe.role = 'admin';
+    safe.assinaturaAtiva = true;
+    safe.planoId = safe.planoId || 'vitalicio';
+    safe.planoNome = safe.planoNome || '👑 Master Vitalício';
+    safe.limiteTelas = 999;
+  } else {
+    safe.isMaster = false;
+    safe.role = user.role || 'user';
+    safe.assinaturaAtiva = isUserSubscriptionActive(user);
+  }
+
   return safe;
 }
+
