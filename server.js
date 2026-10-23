@@ -222,8 +222,16 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
   }
 
   // Streaming binário direto (segmentos .ts, mp4, etc.)
+  const isMp4 = parsedTarget.pathname.toLowerCase().endsWith('.mp4') || targetUrl.toLowerCase().includes('.mp4');
+  let inferredContentType = contentType;
+  if (isMp4 && (!inferredContentType || inferredContentType.includes('octet-stream') || inferredContentType.includes('mp2t'))) {
+    inferredContentType = 'video/mp4';
+  } else if (!inferredContentType) {
+    inferredContentType = isMp4 ? 'video/mp4' : 'video/mp2t';
+  }
+
   const responseHeaders = {
-    'Content-Type': contentType || 'video/mp2t',
+    'Content-Type': inferredContentType,
     'Cache-Control': 'public, max-age=3600',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
@@ -237,7 +245,11 @@ async function handleProxy(req, res, targetUrl, customReferer, customUa) {
   if (cr) responseHeaders['Content-Range'] = cr;
 
   const ar = upstreamRes.headers.get('accept-ranges');
-  if (ar) responseHeaders['Accept-Ranges'] = ar;
+  if (ar) {
+    responseHeaders['Accept-Ranges'] = ar;
+  } else if (isMp4) {
+    responseHeaders['Accept-Ranges'] = 'bytes';
+  }
 
   res.writeHead(upstreamRes.status, responseHeaders);
 

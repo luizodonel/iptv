@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, Star, Film, Clapperboard, Info } from 'lucide-react';
 import { getTmdbMetadata } from '../services/tmdbService';
 
 export default function MediaCard({ item, isFav, onToggleFav, onSelectMedia }) {
   const [meta, setMeta] = useState(null);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const cardRef = useRef(null);
 
   useEffect(() => {
-    let isMounted = true;
+    // If metadata already provided (e.g. from trending or cache)
     if (item.poster && item.rating) {
       setMeta({
         poster: item.poster,
@@ -18,7 +20,36 @@ export default function MediaCard({ item, isFav, onToggleFav, onSelectMedia }) {
       return;
     }
 
-    // Lazy load TMDB metadata
+    // Only observe if IntersectionObserver is supported
+    if (!('IntersectionObserver' in window)) {
+      setIsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '300px' }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [item.poster, item.rating]);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    if (item.poster && item.rating) return;
+
+    let isMounted = true;
     getTmdbMetadata(item.cleanTitle || item.title, item.type, item.year)
       .then(res => {
         if (isMounted && res) {
@@ -28,7 +59,7 @@ export default function MediaCard({ item, isFav, onToggleFav, onSelectMedia }) {
       .catch(() => {});
 
     return () => { isMounted = false; };
-  }, [item.title, item.cleanTitle, item.type, item.year, item.poster, item.rating]);
+  }, [isVisible, item.title, item.cleanTitle, item.type, item.year, item.poster, item.rating]);
 
   const displayPoster = meta?.poster || item.poster;
   const displayRating = meta?.rating || item.rating;
@@ -36,6 +67,7 @@ export default function MediaCard({ item, isFav, onToggleFav, onSelectMedia }) {
 
   return (
     <div 
+      ref={cardRef}
       className="media-card glass-card"
       onClick={() => onSelectMedia({ ...item, ...meta })}
       role="button"

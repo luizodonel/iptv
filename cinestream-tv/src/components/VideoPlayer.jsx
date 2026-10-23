@@ -128,7 +128,27 @@ export default function VideoPlayer({
 
     const video = videoRef.current;
     const safeUrl = toSafeStreamUrl(url, source?.referer, source?.agent);
-    const isHlsUrl = url.includes('.m3u8') || url.includes('/live/') || safeUrl.includes('.m3u8') || safeUrl.includes('/api/proxy');
+
+    const lowerUrl = (url || '').toLowerCase();
+    const lowerSafe = (safeUrl || '').toLowerCase();
+
+    // Direct video formats (MP4, MKV, WebM, etc.) must use native video element
+    const isDirectVideo = (
+      lowerUrl.includes('.mp4') || 
+      lowerUrl.includes('.mkv') || 
+      lowerUrl.includes('.webm') || 
+      lowerUrl.includes('.avi') ||
+      lowerSafe.includes('.mp4')
+    );
+
+    // HLS playlists (.m3u8, /live/ streams, master.txt)
+    const isHlsUrl = !isDirectVideo && (
+      lowerUrl.includes('.m3u8') || 
+      lowerUrl.includes('/live/') || 
+      lowerUrl.includes('master.txt') || 
+      lowerSafe.includes('.m3u8') ||
+      lowerSafe.includes('master.txt')
+    );
 
     if (isHlsUrl) {
       if (Hls.isSupported()) {
@@ -482,6 +502,9 @@ export default function VideoPlayer({
         className={`main-video-element fit-${fitMode}`}
         playsInline
         onTimeUpdate={onTimeUpdate}
+        onLoadedMetadata={() => setIsLoading(false)}
+        onCanPlay={() => setIsLoading(false)}
+        onLoadedData={() => setIsLoading(false)}
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => { setIsLoading(false); setIsPlaying(true); }}
         onPause={() => setIsPlaying(false)}

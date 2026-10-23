@@ -12,7 +12,7 @@ import {
   Tv,
   ListFilter
 } from 'lucide-react';
-import { getSeriesEpisodes } from '../services/vodService';
+import { getSeriesEpisodes, resolveMediaItem } from '../services/vodService';
 
 export default function MediaModal({ 
   item, 
@@ -31,13 +31,18 @@ export default function MediaModal({
   useEffect(() => {
     if (isSeries) {
       setLoadingEpisodes(true);
-      getSeriesEpisodes(item)
-        .then(res => {
-          setEpisodes(res);
-          if (res.length > 0) {
-            setSelectedSeason(res[0].season);
-          }
-        })
+      (async () => {
+        let targetItem = item;
+        if (targetItem.piece === undefined) {
+          targetItem = await resolveMediaItem(item);
+        }
+        const res = await getSeriesEpisodes(targetItem);
+        setEpisodes(res || []);
+        if (res && res.length > 0) {
+          setSelectedSeason(res[0].season);
+        }
+      })()
+        .catch(err => console.error('Erro ao carregar episódios da série:', err))
         .finally(() => setLoadingEpisodes(false));
     }
   }, [item, isSeries]);

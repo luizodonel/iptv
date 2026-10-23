@@ -43,7 +43,9 @@ import {
   Compass,
   History,
   Layers,
-  Sparkles
+  Sparkles,
+  Search,
+  X
 } from 'lucide-react';
 
 export default function App() {
@@ -73,6 +75,12 @@ export default function App() {
   const [moviesList, setMoviesList] = useState([]);
   const [seriesList, setSeriesList] = useState([]);
   const [loadingVod, setLoadingVod] = useState(false);
+
+  // VOD Pagination & Filter state
+  const ITEMS_PER_PAGE = 48;
+  const [visibleMoviesCount, setVisibleMoviesCount] = useState(ITEMS_PER_PAGE);
+  const [visibleSeriesCount, setVisibleSeriesCount] = useState(ITEMS_PER_PAGE);
+  const [vodSearchQuery, setVodSearchQuery] = useState('');
 
   // Trending & Home state
   const [trendingItems, setTrendingItems] = useState([]);
@@ -177,6 +185,10 @@ export default function App() {
 
   // Load Movies / Series when tab or letter changes
   useEffect(() => {
+    setVisibleMoviesCount(ITEMS_PER_PAGE);
+    setVisibleSeriesCount(ITEMS_PER_PAGE);
+    setVodSearchQuery('');
+
     if (activeTab === 'movies') {
       setLoadingVod(true);
       getMoviesByLetter(currentLetter)
@@ -189,6 +201,26 @@ export default function App() {
         .finally(() => setLoadingVod(false));
     }
   }, [activeTab, currentLetter]);
+
+  const filteredMovies = React.useMemo(() => {
+    if (!vodSearchQuery.trim()) return moviesList;
+    const q = vodSearchQuery.toLowerCase().trim();
+    return moviesList.filter(m => (m.cleanTitle || m.title).toLowerCase().includes(q));
+  }, [moviesList, vodSearchQuery]);
+
+  const displayedMovies = React.useMemo(() => {
+    return filteredMovies.slice(0, visibleMoviesCount);
+  }, [filteredMovies, visibleMoviesCount]);
+
+  const filteredSeries = React.useMemo(() => {
+    if (!vodSearchQuery.trim()) return seriesList;
+    const q = vodSearchQuery.toLowerCase().trim();
+    return seriesList.filter(s => (s.cleanTitle || s.title).toLowerCase().includes(q));
+  }, [seriesList, vodSearchQuery]);
+
+  const displayedSeries = React.useMemo(() => {
+    return filteredSeries.slice(0, visibleSeriesCount);
+  }, [filteredSeries, visibleSeriesCount]);
 
   // Handle Play Action with Subscription Protection
   const handlePlayMedia = async (item, episode = null, allEpisodes = null) => {
@@ -410,6 +442,30 @@ export default function App() {
               counts={letterCounts}
             />
 
+            {/* In-Letter Search and Count Bar */}
+            <div className="vod-controls-bar">
+              <div className="vod-search-wrap">
+                <Search size={18} className="vod-search-icon" />
+                <input 
+                  type="text" 
+                  placeholder={`Filtrar filmes na letra ${currentLetter}...`}
+                  value={vodSearchQuery}
+                  onChange={e => setVodSearchQuery(e.target.value)}
+                  className="vod-search-input"
+                />
+                {vodSearchQuery && (
+                  <button className="vod-search-clear" onClick={() => setVodSearchQuery('')} aria-label="Limpar filtro">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <div className="vod-count-badge">
+                <span>
+                  Exibindo {Math.min(displayedMovies.length, filteredMovies.length)} de {filteredMovies.length} filmes (Letra {currentLetter})
+                </span>
+              </div>
+            </div>
+
             {/* Movies Grid */}
             {loadingVod ? (
               <div className="media-loading-grid">
@@ -417,23 +473,37 @@ export default function App() {
                   <div key={i} className="media-skeleton shimmer"></div>
                 ))}
               </div>
-            ) : moviesList.length > 0 ? (
-              <div className="media-grid">
-                {moviesList.map(movie => (
-                  <MediaCard 
-                    key={movie.id} 
-                    item={movie}
-                    isFav={isFavorite(movie.title, 'movie')}
-                    onToggleFav={handleToggleFav}
-                    onSelectMedia={setSelectedDetailItem}
-                  />
-                ))}
-              </div>
+            ) : displayedMovies.length > 0 ? (
+              <>
+                <div className="media-grid">
+                  {displayedMovies.map(movie => (
+                    <MediaCard 
+                      key={movie.id} 
+                      item={movie}
+                      isFav={isFavorite(movie.title, 'movie')}
+                      onToggleFav={handleToggleFav}
+                      onSelectMedia={setSelectedDetailItem}
+                    />
+                  ))}
+                </div>
+
+                {visibleMoviesCount < filteredMovies.length && (
+                  <div className="load-more-container">
+                    <button 
+                      className="btn-load-more glass-panel"
+                      onClick={() => setVisibleMoviesCount(prev => prev + ITEMS_PER_PAGE)}
+                    >
+                      <RefreshCw size={18} />
+                      <span>Carregar Mais ({filteredMovies.length - visibleMoviesCount} restantes)</span>
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="empty-state-box glass-panel">
                 <Film size={48} className="text-secondary" />
-                <h3>Nenhum filme carregado nesta letra</h3>
-                <p>Selecione outra letra no menu acima ou use a busca global.</p>
+                <h3>{vodSearchQuery ? 'Nenhum filme encontrado com este filtro' : 'Nenhum filme carregado nesta letra'}</h3>
+                <p>{vodSearchQuery ? 'Tente pesquisar outro termo ou limpe o campo de filtro.' : 'Selecione outra letra no menu acima ou use a busca global.'}</p>
               </div>
             )}
           </div>
@@ -461,6 +531,30 @@ export default function App() {
               counts={letterCounts}
             />
 
+            {/* In-Letter Search and Count Bar */}
+            <div className="vod-controls-bar">
+              <div className="vod-search-wrap">
+                <Search size={18} className="vod-search-icon" />
+                <input 
+                  type="text" 
+                  placeholder={`Filtrar séries na letra ${currentLetter}...`}
+                  value={vodSearchQuery}
+                  onChange={e => setVodSearchQuery(e.target.value)}
+                  className="vod-search-input"
+                />
+                {vodSearchQuery && (
+                  <button className="vod-search-clear" onClick={() => setVodSearchQuery('')} aria-label="Limpar filtro">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <div className="vod-count-badge">
+                <span>
+                  Exibindo {Math.min(displayedSeries.length, filteredSeries.length)} de {filteredSeries.length} séries (Letra {currentLetter})
+                </span>
+              </div>
+            </div>
+
             {/* Series Grid */}
             {loadingVod ? (
               <div className="media-loading-grid">
@@ -468,23 +562,37 @@ export default function App() {
                   <div key={i} className="media-skeleton shimmer"></div>
                 ))}
               </div>
-            ) : seriesList.length > 0 ? (
-              <div className="media-grid">
-                {seriesList.map(series => (
-                  <MediaCard 
-                    key={series.id} 
-                    item={series}
-                    isFav={isFavorite(series.title, 'series')}
-                    onToggleFav={handleToggleFav}
-                    onSelectMedia={setSelectedDetailItem}
-                  />
-                ))}
-              </div>
+            ) : displayedSeries.length > 0 ? (
+              <>
+                <div className="media-grid">
+                  {displayedSeries.map(series => (
+                    <MediaCard 
+                      key={series.id} 
+                      item={series}
+                      isFav={isFavorite(series.title, 'series')}
+                      onToggleFav={handleToggleFav}
+                      onSelectMedia={setSelectedDetailItem}
+                    />
+                  ))}
+                </div>
+
+                {visibleSeriesCount < filteredSeries.length && (
+                  <div className="load-more-container">
+                    <button 
+                      className="btn-load-more glass-panel"
+                      onClick={() => setVisibleSeriesCount(prev => prev + ITEMS_PER_PAGE)}
+                    >
+                      <RefreshCw size={18} />
+                      <span>Carregar Mais ({filteredSeries.length - visibleSeriesCount} restantes)</span>
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="empty-state-box glass-panel">
                 <Clapperboard size={48} className="text-secondary" />
-                <h3>Nenhuma série carregada nesta letra</h3>
-                <p>Selecione outra letra no menu acima ou use a busca global.</p>
+                <h3>{vodSearchQuery ? 'Nenhuma série encontrada com este filtro' : 'Nenhuma série carregada nesta letra'}</h3>
+                <p>{vodSearchQuery ? 'Tente pesquisar outro termo ou limpe o campo de filtro.' : 'Selecione outra letra no menu acima ou use a busca global.'}</p>
               </div>
             )}
           </div>
