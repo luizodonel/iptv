@@ -61,8 +61,8 @@ export default function Navbar({
             tabIndex={0}
           >
             <div className="brand-text">
-              <span className="brand-title">Top</span>
-              <span className="brand-badge">Canais</span>
+              <span className="brand-title">Top Canais</span>
+              <span className="brand-badge">TV</span>
             </div>
           </div>
 
