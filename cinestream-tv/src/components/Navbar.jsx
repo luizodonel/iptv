@@ -24,6 +24,7 @@ export default function Navbar({
   onOpenAuth,
   onOpenPlans,
   onOpenSupport,
+  onOpenMasterPanel,
   onLogout
 }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -49,6 +50,7 @@ export default function Navbar({
   }, []);
 
   const firstLetter = (currentUser?.username || currentUser?.nome || 'U').charAt(0).toUpperCase();
+  const isMaster = (currentUser?.username || '').toLowerCase().trim() === 'odonel' || currentUser?.role === 'admin' || currentUser?.isMaster === true;
 
   return (
     <>
@@ -90,6 +92,18 @@ export default function Navbar({
 
           {/* Top Actions */}
           <div className="navbar-actions">
+            {/* Master Odonel Button */}
+            {isMaster && (
+              <button
+                className="nav-master-btn pulse-glow"
+                onClick={onOpenMasterPanel}
+                title="Painel Administrativo Master Odonel"
+              >
+                <Crown size={16} className="text-gold" />
+                <span>Painel Master</span>
+              </button>
+            )}
+
             {/* Planos Button */}
             <button
               className="nav-plans-btn pulse-hover"
@@ -178,6 +192,23 @@ export default function Navbar({
 
                     <div className="dropdown-divider" />
 
+                    {/* Opção Exclusiva Master Odonel no Menu */}
+                    {isMaster && (
+                      <>
+                        <button
+                          className="dropdown-item master-menu-item"
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            if (onOpenMasterPanel) onOpenMasterPanel();
+                          }}
+                        >
+                          <Crown size={16} className="text-gold" />
+                          <span className="font-bold text-gold">👑 Painel Master</span>
+                        </button>
+                        <div className="dropdown-divider" />
+                      </>
+                    )}
+
                     <button
                       className="dropdown-item"
                       onClick={() => {
@@ -247,6 +278,21 @@ export default function Navbar({
             </button>
           );
         })}
+
+        {/* Botão Master no celular com 1 toque */}
+        {isMaster && (
+          <button
+            className="mobile-bottom-btn mobile-master-btn"
+            onClick={onOpenMasterPanel}
+            title="Painel Master Odonel"
+          >
+            <div className="bottom-nav-icon-wrap">
+              <Crown size={20} className="text-gold pulse-glow" />
+              <span className="bottom-nav-badge master-badge-dot">👑</span>
+            </div>
+            <span className="bottom-nav-label text-gold font-bold">Master</span>
+          </button>
+        )}
       </nav>
     </>
   );

@@ -18,8 +18,10 @@ import {
   AlertCircle,
   PictureInPicture,
   Check,
-  Scan
+  Scan,
+  Cast
 } from 'lucide-react';
+import CastToTvModal from './CastToTvModal';
 import { saveWatchProgress, getSavedProgress } from '../services/storageService';
 
 export default function VideoPlayer({ 
@@ -50,6 +52,7 @@ export default function VideoPlayer({
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [castModalOpen, setCastModalOpen] = useState(false);
 
   const toastTimeoutRef = useRef(null);
   const lastTapRef = useRef(0);
@@ -809,6 +812,15 @@ export default function VideoPlayer({
                 <Scan size={18} />
               </button>
 
+              {/* Transmitir para a TV (Chromecast / AirPlay / Smart TV) */}
+              <button 
+                className="control-btn" 
+                onClick={() => setCastModalOpen(true)} 
+                title="Transmitir para a TV (Chromecast, AirPlay, Smart TV)"
+              >
+                <Cast size={18} />
+              </button>
+
               {/* PiP Button */}
               <button className="control-btn" onClick={togglePiP} title="Picture in Picture">
                 <PictureInPicture size={18} />
@@ -823,6 +835,17 @@ export default function VideoPlayer({
         </div>
 
       </div>
+
+      {/* Modal de Transmissão para a TV */}
+      {castModalOpen && (
+        <CastToTvModal
+          isOpen={castModalOpen}
+          onClose={() => setCastModalOpen(false)}
+          item={item}
+          streamUrl={streamUrl}
+          videoElement={videoRef.current}
+        />
+      )}
     </div>
   );
 }

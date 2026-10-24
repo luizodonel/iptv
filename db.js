@@ -530,6 +530,266 @@ class Database {
     return user;
   }
 
+  ensureMasterUser(hashPasswordFn) {
+    const existing = this.findUserByUsername('odonel');
+    if (!existing) {
+      const senhaHash = hashPasswordFn ? hashPasswordFn('odonel2026') : null;
+      if (!senhaHash) return null;
+
+      const masterUser = {
+        id: 'usr_master_odonel',
+        username: 'odonel',
+        nome: 'Master Odonel',
+        telefone: '(61) 98226-1155',
+        email: 'odonel@topcanais.tv',
+        senhaHash,
+        cpf: '',
+        createdAt: new Date().toISOString(),
+        assinaturaAtiva: true,
+        planoId: 'vitalicio',
+        planoNome: '👑 Master Vitalício',
+        limiteTelas: 999,
+        dataAssinatura: new Date().toISOString(),
+        fimAssinatura: null,
+        trialUsed: true,
+        trialIp: null,
+        registrationIp: null
+      };
+
+      this.data.users.unshift(masterUser);
+      this.saveLocal();
+      this.pgInsertUser(masterUser);
+      console.log('👑 Usuário Master [odonel] inicializado com sucesso.');
+      return masterUser;
+    } else {
+      if (!existing.assinaturaAtiva || existing.planoId !== 'vitalicio') {
+        existing.assinaturaAtiva = true;
+        existing.planoId = 'vitalicio';
+        existing.planoNome = '👑 Master Vitalício';
+        existing.limiteTelas = 999;
+        this.saveLocal();
+        this.pgInsertUser(existing);
+      }
+      return existing;
+    }
+  }
+
+  // --- Painel Master: Métodos de Controle e Auditoria ---
+  getMasterStats() {
+    const now = Date.now();
+    const ONLINE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutos
+
+    let totalUsers = this.data.users.length;
+    let activeUsers = 0;
+    let inactiveUsers = 0;
+    let onlineUsersCount = 0;
+    let onlineSessionsCount = 0;
+
+    const onlineUserIds = new Set();
+
+    for (const u of this.data.users) {
+      const username = (u.username || '').toLowerCase().trim();
+      const isMaster = username === 'odonel' || u.role === 'admin' || u.isMaster;
+      const end = u.fimAssinatura ? new Date(u.fimAssinatura).getTime() : null;
+      const isSubActive = isMaster || (u.assinaturaAtiva && (!end || end > now));
+
+      if (isSubActive) {
+        activeUsers++;
+      } else {
+        inactiveUsers++;
+      }
+    }
+
+    for (const s of (this.data.sessions || [])) {
+      if (!s.isActive) continue;
+      const hbTime = new Date(s.lastHeartbeat || s.createdAt).getTime();
+      if ((now - hbTime) <= ONLINE_THRESHOLD_MS) {
+        onlineSessionsCount++;
+        onlineUserIds.add(s.userId);
+      }
+    }
+
+    onlineUsersCount = onlineUserIds.size;
+
+    return {
+      totalUsers,
+      activeUsers,
+      inactiveUsers,
+      onlineUsersCount,
+      onlineSessionsCount,
+      totalLogs: (this.data.accessLogs || []).length,
+      testedIpsCount: (this.data.testedIps || []).length
+    };
+  }
+
+  getMasterUsers() {
+    const now = Date.now();
+    const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+    return this.data.users.map(u => {
+      const username = (u.username || '').toLowerCase().trim();
+      const isMaster = username === 'odonel' || u.role === 'admin' || u.isMaster;
+      const end = u.fimAssinatura ? new Date(u.fimAssinatura).getTime() : null;
+      const isSubActive = isMaster || (u.assinaturaAtiva && (!end || end > now));
+
+      // Busca sessões ativas do usuário
+      const userSessions = (this.data.sessions || [])
+        .filter(s => s.userId === u.id && s.isActive)
+        .map(s => {
+          const hbTime = new Date(s.lastHeartbeat || s.createdAt).getTime();
+          const isSessionOnline = (now - hbTime) <= ONLINE_THRESHOLD_MS;
+          return {
+            id: s.id,
+            deviceId: s.deviceId,
+            deviceInfo: s.deviceInfo,
+            createdAt: s.createdAt,
+            lastHeartbeat: s.lastHeartbeat,
+            isOnline: isSessionOnline,
+            secondsSinceHeartbeat: Math.max(0, Math.floor((now - hbTime) / 1000))
+          };
+        });
+
+      const isUserOnline = userSessions.some(s => s.isOnline);
+
+      let status = 'inativo';
+      let expiresInText = 'Inativo / Sem Plano';
+
+      if (isMaster) {
+        status = 'vitalicio';
+        expiresInText = '👑 Vitalício Permanente';
+      } else if (u.planoId === 'teste-2h') {
+        if (isSubActive && end) {
+          status = 'trial';
+          const remMin = Math.max(0, Math.floor((end - now) / 60000));
+          expiresInText = `⏱️ Teste: ${remMin} min restantes`;
+        } else {
+          status = 'expirado';
+          expiresInText = '⏱️ Teste Expirado';
+        }
+      } else if (isSubActive) {
+        status = 'ativo';
+        if (end) {
+          const diffMs = end - now;
+          const days = Math.floor(diffMs / (24 * 3600 * 1000));
+          const hours = Math.floor((diffMs % (24 * 3600 * 1000)) / 3600000);
+          if (days > 0) {
+            expiresInText = `Expira em ${days}d ${hours}h (${new Date(end).toLocaleDateString('pt-BR')})`;
+          } else {
+            expiresInText = `Expira hoje em ${hours}h`;
+          }
+        } else {
+          expiresInText = 'Ativo (Sem data limite)';
+        }
+      } else if (end && now >= end) {
+        status = 'expirado';
+        expiresInText = `Expirou em ${new Date(end).toLocaleDateString('pt-BR')}`;
+      }
+
+      return {
+        id: u.id,
+        username: u.username,
+        nome: u.nome,
+        telefone: u.telefone,
+        email: u.email,
+        cpf: u.cpf,
+        createdAt: u.createdAt,
+        assinaturaAtiva: isSubActive,
+        planoId: u.planoId,
+        planoNome: isMaster ? '👑 Master Vitalício' : (u.planoNome || 'Sem Plano'),
+        limiteTelas: isMaster ? 999 : (u.limiteTelas || 1),
+        dataAssinatura: u.dataAssinatura,
+        fimAssinatura: u.fimAssinatura,
+        trialUsed: Boolean(u.trialUsed),
+        registrationIp: u.registrationIp,
+        isMaster,
+        isOnline: isUserOnline,
+        status,
+        expiresInText,
+        activeSessions: userSessions,
+        activeSessionsCount: userSessions.length
+      };
+    });
+  }
+
+  setMasterUserStatus(userId, options = {}) {
+    const user = this.findUserById(userId);
+    if (!user) return null;
+
+    const {
+      active,
+      durationHours,
+      durationDays,
+      expireDate,
+      planoId,
+      planoNome,
+      limiteTelas,
+      kickSessions = true
+    } = options;
+
+    const now = new Date();
+
+    if (active) {
+      user.assinaturaAtiva = true;
+      user.dataAssinatura = now.toISOString();
+
+      if (expireDate) {
+        user.fimAssinatura = new Date(expireDate).toISOString();
+      } else if (durationHours) {
+        user.fimAssinatura = new Date(now.getTime() + (Number(durationHours) * 3600 * 1000)).toISOString();
+      } else if (durationDays) {
+        user.fimAssinatura = new Date(now.getTime() + (Number(durationDays) * 24 * 3600 * 1000)).toISOString();
+      } else if (planoId === 'vitalicio') {
+        user.fimAssinatura = null;
+      } else {
+        // Padrão: 30 dias se não informado
+        user.fimAssinatura = new Date(now.getTime() + (30 * 24 * 3600 * 1000)).toISOString();
+      }
+
+      if (planoId) user.planoId = planoId;
+      if (planoNome) user.planoNome = planoNome;
+      if (limiteTelas) user.limiteTelas = Number(limiteTelas);
+
+      if (planoId && planoId !== 'teste-2h') {
+        user.trialUsed = true;
+      }
+    } else {
+      user.assinaturaAtiva = false;
+      user.fimAssinatura = now.toISOString();
+
+      if (kickSessions) {
+        this.terminateUserSessions(userId, 'Sua assinatura foi inativada pelo usuário Master.');
+      }
+    }
+
+    this.saveLocal();
+    this.pgInsertUser(user);
+    return user;
+  }
+
+  terminateUserSessions(userId, reason = 'Sessão derrubada pelo usuário Master.') {
+    const active = this.getActiveSessions(userId);
+    const nowIso = new Date().toISOString();
+    active.forEach(s => {
+      s.isActive = false;
+      s.terminatedReason = reason;
+      s.terminatedAt = nowIso;
+      this.pgInsertSession(s);
+    });
+    this.saveLocal();
+    return active.length;
+  }
+
+  terminateSessionById(sessionId, reason = 'Sessão derrubada pelo usuário Master.') {
+    const session = this.findSession(sessionId);
+    if (!session) return false;
+    session.isActive = false;
+    session.terminatedReason = reason;
+    session.terminatedAt = new Date().toISOString();
+    this.saveLocal();
+    this.pgInsertSession(session);
+    return true;
+  }
+
   // --- Sessões & Controle de Telas Simultâneas ---
   getActiveSessions(userId) {
     return this.data.sessions.filter(s => s.userId === userId && s.isActive);

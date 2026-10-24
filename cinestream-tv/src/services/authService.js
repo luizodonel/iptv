@@ -222,3 +222,65 @@ export async function checkPixStatus(paymentId) {
 
   return data;
 }
+
+// --- Painel Master Odonel: Funções de Consulta e Controle ---
+
+export async function fetchMasterStats() {
+  const token = getAuthToken();
+  const res = await fetch('/api/master/stats', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao carregar estatísticas do Master.');
+  return data.stats;
+}
+
+export async function fetchMasterUsers() {
+  const token = getAuthToken();
+  const res = await fetch('/api/master/users', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao carregar usuários.');
+  return data.users || [];
+}
+
+export async function updateMasterUserStatus(payload) {
+  const token = getAuthToken();
+  const res = await fetch('/api/master/users/status', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao atualizar status do usuário.');
+  return data;
+}
+
+export async function kickMasterSession({ sessionId, userId, reason }) {
+  const token = getAuthToken();
+  const res = await fetch('/api/master/sessions/kick', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ sessionId, userId, reason })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao derrubar sessão.');
+  return data;
+}
+
+export async function fetchMasterLogs(limit = 200) {
+  const token = getAuthToken();
+  const res = await fetch(`/api/master/logs?limit=${limit}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao carregar logs de acesso.');
+  return data.logs || [];
+}

@@ -30,8 +30,10 @@ import {
   Baby,
   Newspaper,
   Scan,
-  Maximize2
+  Maximize2,
+  Cast
 } from 'lucide-react';
+import CastToTvModal from './CastToTvModal';
 
 // Category metadata with icons and colors
 const CATEGORY_CONFIG = {
@@ -181,6 +183,7 @@ export default function LiveTvView({
   const [fitMode, setFitMode] = useState('contain'); // 'contain' (original) or 'cover' (preencher toda a tela)
   const [showControls, setShowControls] = useState(true);
   const [toastMsg, setToastMsg] = useState('');
+  const [castModalOpen, setCastModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -796,6 +799,15 @@ export default function LiveTvView({
                       <span className="ctrl-btn-label-text">{fitMode === 'cover' ? 'Preenchido' : 'Ajustar'}</span>
                     </button>
 
+                    {/* Transmitir para a TV (Chromecast, AirPlay, Smart TV) */}
+                    <button 
+                      className="ctrl-btn-ghost" 
+                      onClick={() => setCastModalOpen(true)} 
+                      title="Transmitir para a TV (Chromecast, AirPlay, Smart TV)"
+                    >
+                      <Cast size={18} />
+                    </button>
+
                     <button className="ctrl-btn-ghost" onClick={togglePiP} title="Picture in Picture">
                       <PictureInPicture size={18} />
                     </button>
@@ -891,6 +903,17 @@ export default function LiveTvView({
           </div>
         )}
       </section>
+
+      {/* Modal de Transmissão para a TV */}
+      {castModalOpen && activeChannel && (
+        <CastToTvModal
+          isOpen={castModalOpen}
+          onClose={() => setCastModalOpen(false)}
+          item={activeChannel}
+          streamUrl={streamUrl}
+          videoElement={videoRef.current}
+        />
+      )}
     </div>
   );
 }

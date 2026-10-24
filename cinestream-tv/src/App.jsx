@@ -17,6 +17,7 @@ import SessionTerminatedModal from './components/SessionTerminatedModal';
 import SecurityShield from './components/SecurityShield';
 import SupportModal from './components/SupportModal';
 import SupportFloatingButton from './components/SupportFloatingButton';
+import MasterPanelModal from './components/MasterPanelModal';
 
 import { getAuthUser, logoutUser, checkHeartbeat } from './services/authService';
 import { updateSecurityUser } from './services/securityService';
@@ -67,6 +68,7 @@ export default function App() {
   const [sessionKickedOpen, setSessionKickedOpen] = useState(false);
   const [sessionKickedReason, setSessionKickedReason] = useState('');
   const [supportModalOpen, setSupportModalOpen] = useState(false);
+  const [masterPanelOpen, setMasterPanelOpen] = useState(false);
 
   // Channels state
   const [channels, setChannels] = useState([]);
@@ -409,6 +411,7 @@ export default function App() {
         }}
         onOpenPlans={() => setPlansModalOpen(true)}
         onOpenSupport={() => setSupportModalOpen(true)}
+        onOpenMasterPanel={() => setMasterPanelOpen(true)}
         onLogout={logoutUser}
       />
 
@@ -916,6 +919,13 @@ export default function App() {
       <SupportModal 
         isOpen={supportModalOpen}
         onClose={() => setSupportModalOpen(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Painel Administrativo Exclusivo Master Odonel */}
+      <MasterPanelModal 
+        isOpen={masterPanelOpen}
+        onClose={() => setMasterPanelOpen(false)}
         currentUser={currentUser}
       />
 

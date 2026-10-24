@@ -20,6 +20,9 @@ import { mercadoPagoService } from './mercadoPagoService.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Garante que o usuário Master Odonel exista com acesso permanente ilimitado
+db.ensureMasterUser(hashPassword);
+
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const DIST_DIR = fs.existsSync(path.resolve(__dirname, 'dist'))
   ? path.resolve(__dirname, 'dist')
@@ -480,7 +483,149 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // --- Consulta de Auditoria de Acessos (Administrador) ---
+  // --- Middleware de Validação Master Odonel ---
+  function requireMasterAuth(req, res) {
+    const auth = authenticateUser(req);
+    if (!auth) {
+      sendJson(res, 401, { error: 'Autenticação necessária. Faça login como Master.' });
+      return null;
+    }
+    const username = (auth.user.username || '').toLowerCase().trim();
+    const isMaster = username === 'odonel' || auth.user.role === 'admin' || auth.user.isMaster === true;
+    if (!isMaster) {
+      sendJson(res, 403, { error: 'Acesso negado. Esta funcionalidade é restrita exclusivamente ao usuário Master Odonel.' });
+      return null;
+    }
+    return auth;
+  }
+
+  // --- Rotas Exclusivas do Painel Master Odonel ---
+
+  // 1. Estatísticas do Painel Master (Totais, Ativos, Inativos, Online Agora)
+  if (pathname === '/api/master/stats' && req.method === 'GET') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+    const stats = db.getMasterStats();
+    sendJson(res, 200, { success: true, stats });
+    return;
+  }
+
+  // 2. Listagem Completa de Usuários (com Sessões Conectadas e Status de Assinatura)
+  if (pathname === '/api/master/users' && req.method === 'GET') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+    const users = db.getMasterUsers();
+    sendJson(res, 200, { success: true, users });
+    return;
+  }
+
+  // 3. Ativar / Inativar Usuário e Determinar Período de Validade
+  if (pathname === '/api/master/users/status' && req.method === 'POST') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const {
+        userId,
+        active,
+        durationHours,
+        durationDays,
+        expireDate,
+        planoId,
+        planoNome,
+        limiteTelas,
+        kickSessions
+      } = body;
+
+      if (!userId) {
+        sendJson(res, 400, { error: 'userId é obrigatório.' });
+        return;
+      }
+
+      const targetUser = db.findUserById(userId);
+      if (!targetUser) {
+        sendJson(res, 404, { error: 'Usuário não encontrado.' });
+        return;
+      }
+
+      // Proteção: Nunca inativar a própria conta master 'odonel'
+      const targetUsername = (targetUser.username || '').toLowerCase().trim();
+      if (targetUsername === 'odonel' && active === false) {
+        sendJson(res, 400, { error: 'A conta do Master Odonel não pode ser inativada.' });
+        return;
+      }
+
+      const updated = db.setMasterUserStatus(userId, {
+        active: Boolean(active),
+        durationHours,
+        durationDays,
+        expireDate,
+        planoId,
+        planoNome,
+        limiteTelas,
+        kickSessions: kickSessions !== false
+      });
+
+      sendJson(res, 200, {
+        success: true,
+        user: updated,
+        message: active 
+          ? `Usuário ${updated.username} ativado com sucesso!` 
+          : `Usuário ${updated.username} inativado com sucesso!`
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar status do usuário (Master):', err);
+      sendJson(res, 500, { error: 'Erro ao processar alteração: ' + err.message });
+    }
+    return;
+  }
+
+  // 4. Derrubar Sessão(ões) Ativa(s) de Usuário
+  if (pathname === '/api/master/sessions/kick' && req.method === 'POST') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { sessionId, userId, reason } = body;
+      const customReason = reason || 'Sua sessão foi encerrada pelo usuário Master Odonel.';
+
+      if (sessionId) {
+        const ok = db.terminateSessionById(sessionId, customReason);
+        sendJson(res, 200, { success: ok, message: 'Sessão derrubada com sucesso.' });
+        return;
+      }
+
+      if (userId) {
+        const count = db.terminateUserSessions(userId, customReason);
+        sendJson(res, 200, { success: true, message: `${count} sessão(ões) derrubada(s) com sucesso.` });
+        return;
+      }
+
+      sendJson(res, 400, { error: 'Informe sessionId ou userId.' });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // 5. Consulta de Logs de Auditoria de Acessos
+  if (pathname === '/api/master/logs' && req.method === 'GET') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    const limit = parseInt(parsedUrl.searchParams.get('limit') || '300', 10);
+    const logs = db.getAccessLogs(limit);
+    sendJson(res, 200, {
+      success: true,
+      total: (db.data.accessLogs || []).length,
+      logs
+    });
+    return;
+  }
+
+  // --- Consulta Legada de Auditoria de Acessos ---
   if (pathname === '/api/admin/access-logs' && req.method === 'GET') {
     const auth = authenticateUser(req);
     const isMaster = auth && (auth.user.username === 'odonel' || auth.user.role === 'admin' || auth.user.isMaster);
