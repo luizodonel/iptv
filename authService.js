@@ -36,6 +36,14 @@ export const PLANS = {
     duracaoDias: 365,
     valor: 180.00,
     descricao: '1 ano completo para até 2 telas simultâneas. Economia máxima para a família!'
+  },
+  'teste-2h': {
+    id: 'teste-2h',
+    nome: 'Teste Grátis (2 Horas)',
+    telas: 1,
+    duracaoHoras: 2,
+    valor: 0.00,
+    descricao: '2 horas de degustação gratuita para testar todos os canais ao vivo, filmes e séries.'
   }
 };
 
@@ -131,6 +139,17 @@ export function sanitizeUser(user) {
     safe.isMaster = false;
     safe.role = user.role || 'user';
     safe.assinaturaAtiva = isUserSubscriptionActive(user);
+
+    if (user.planoId === 'teste-2h') {
+      safe.isTrial = true;
+      if (safe.assinaturaAtiva && user.fimAssinatura) {
+        safe.trialSecondsRemaining = Math.max(0, Math.floor((new Date(user.fimAssinatura).getTime() - Date.now()) / 1000));
+        safe.trialExpiresAt = user.fimAssinatura;
+      } else {
+        safe.trialSecondsRemaining = 0;
+        safe.trialExpired = true;
+      }
+    }
   }
 
   return safe;

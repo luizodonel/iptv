@@ -5,7 +5,7 @@ import zlib from 'node:zlib';
 import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
-import { db } from './db.js';
+import { db, normalizeIp } from './db.js';
 import { 
   PLANS, 
   hashPassword, 
@@ -89,6 +89,82 @@ function authenticateUser(req) {
   const user = db.findUserById(payload.userId);
   if (!user) return null;
   return { user, payload };
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const first = forwarded.split(',')[0].trim();
+    return normalizeIp(first);
+  }
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) return normalizeIp(cfIp.trim());
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) return normalizeIp(realIp.trim());
+  const remote = req.socket?.remoteAddress || '';
+  return normalizeIp(remote);
+}
+
+function parseDevice(ua = '') {
+  let deviceType = 'Desktop';
+  let deviceModel = 'Computador';
+  let browser = 'Navegador Web';
+  let os = 'Desconhecido';
+
+  if (!ua) return { deviceType, deviceModel, browser, os };
+
+  // OS
+  if (/Windows/i.test(ua)) os = 'Windows';
+  else if (/iPhone/i.test(ua)) os = 'iOS (iPhone)';
+  else if (/iPad/i.test(ua)) os = 'iPadOS';
+  else if (/Macintosh|Mac OS X/i.test(ua)) os = 'macOS';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+  else if (/Tizen/i.test(ua)) os = 'Tizen OS';
+  else if (/Web0S|WebOS/i.test(ua)) os = 'LG webOS';
+
+  // Device Type & Model
+  if (/Tizen/i.test(ua)) {
+    deviceType = 'Smart TV';
+    deviceModel = 'Samsung Smart TV (Tizen)';
+  } else if (/Web0S|WebOS/i.test(ua)) {
+    deviceType = 'Smart TV';
+    deviceModel = 'LG Smart TV (webOS)';
+  } else if (/Android.*TV|AFT|BRAVIA|MiTV|AppleTV|Roku/i.test(ua)) {
+    deviceType = 'Smart TV';
+    deviceModel = 'Android TV / TV Box';
+  } else if (/iPhone/i.test(ua)) {
+    deviceType = 'Mobile';
+    deviceModel = 'Apple iPhone';
+  } else if (/iPad/i.test(ua)) {
+    deviceType = 'Tablet';
+    deviceModel = 'Apple iPad';
+  } else if (/Mobile/i.test(ua) && /Android/i.test(ua)) {
+    deviceType = 'Mobile';
+    deviceModel = 'Smartphone Android';
+  } else if (/Android/i.test(ua)) {
+    deviceType = 'Tablet';
+    deviceModel = 'Tablet Android';
+  } else if (/Windows/i.test(ua)) {
+    deviceType = 'Desktop';
+    deviceModel = 'PC Windows';
+  } else if (/Macintosh|Mac OS/i.test(ua)) {
+    deviceType = 'Desktop';
+    deviceModel = 'Apple Mac';
+  } else if (/Linux/i.test(ua)) {
+    deviceType = 'Desktop';
+    deviceModel = 'Computador Linux';
+  }
+
+  // Browser
+  if (/Edg/i.test(ua)) browser = 'Microsoft Edge';
+  else if (/Chrome|CriOS/i.test(ua)) browser = 'Google Chrome';
+  else if (/Firefox|FxiOS/i.test(ua)) browser = 'Mozilla Firefox';
+  else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Apple Safari';
+  else if (/Opera|OPR/i.test(ua)) browser = 'Opera';
+  else if (/SamsungBrowser/i.test(ua)) browser = 'Samsung Internet';
+
+  return { deviceType, deviceModel, browser, os };
 }
 
 /**
@@ -357,11 +433,74 @@ const server = http.createServer(async (req, res) => {
 
   // --- Planos Disponíveis ---
   if (pathname === '/api/auth/plans' && req.method === 'GET') {
-    sendJson(res, 200, { plans: Object.values(PLANS) });
+    // Retorna apenas planos comerciais para a tabela de assinaturas (exclui teste interno)
+    const commercialPlans = Object.values(PLANS).filter(p => p.id !== 'teste-2h');
+    sendJson(res, 200, { plans: commercialPlans });
     return;
   }
 
-  // --- Cadastro de Usuário ---
+  // --- Consulta de Elegibilidade de Teste por IP ---
+  if (pathname === '/api/auth/check-ip-trial' && req.method === 'GET') {
+    const clientIp = getClientIp(req);
+    const hasUsedTest = db.hasIpUsedTest(clientIp);
+    sendJson(res, 200, {
+      ip: clientIp,
+      hasUsedTest,
+      canTrial: !hasUsedTest,
+      trialDurationHours: 2
+    });
+    return;
+  }
+
+  // --- Rastreamento de Acesso (Salva IP, Horário e Dispositivo no Banco) ---
+  if (pathname === '/api/tracking/access' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const auth = authenticateUser(req);
+      const clientIp = getClientIp(req);
+      const ua = req.headers['user-agent'] || '';
+      const dev = parseDevice(ua);
+
+      const log = db.recordAccess({
+        ip: clientIp,
+        userId: auth?.user?.id || null,
+        username: auth?.user?.username || null,
+        deviceType: dev.deviceType,
+        deviceModel: dev.deviceModel,
+        browser: dev.browser,
+        os: dev.os,
+        userAgent: ua,
+        path: body.path || '/'
+      });
+
+      sendJson(res, 200, { ok: true, ip: clientIp, logId: log.id });
+    } catch (err) {
+      sendJson(res, 200, { ok: false, error: err.message });
+    }
+    return;
+  }
+
+  // --- Consulta de Auditoria de Acessos (Administrador) ---
+  if (pathname === '/api/admin/access-logs' && req.method === 'GET') {
+    const auth = authenticateUser(req);
+    const isMaster = auth && (auth.user.username === 'odonel' || auth.user.role === 'admin' || auth.user.isMaster);
+    const secret = parsedUrl.searchParams.get('key');
+    if (!isMaster && secret !== 'odonel2026') {
+      sendJson(res, 403, { error: 'Acesso restrito ao administrador.' });
+      return;
+    }
+
+    const limit = parseInt(parsedUrl.searchParams.get('limit') || '150', 10);
+    const logs = db.getAccessLogs(limit);
+    sendJson(res, 200, {
+      total: db.data.accessLogs.length,
+      testedIpsCount: db.data.testedIps.length,
+      logs
+    });
+    return;
+  }
+
+  // --- Cadastro de Usuário (Com Regra de 1 Teste de 2h por IP) ---
   if (pathname === '/api/auth/register' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
@@ -412,6 +551,30 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
+      // Regra de IP e Teste Grátis de 2 Horas:
+      const clientIp = getClientIp(req);
+      const isIpAlreadyTested = db.hasIpUsedTest(clientIp);
+
+      let assinaturaAtiva = false;
+      let planoId = null;
+      let planoNome = null;
+      let dataAssinatura = null;
+      let fimAssinatura = null;
+      let trialGranted = false;
+
+      if (!isIpAlreadyTested) {
+        // Concede 2 horas de teste gratuito (apenas 1 vez por IP e por usuário)
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + (2 * 60 * 60 * 1000)); // 2 horas exatas
+
+        assinaturaAtiva = true;
+        planoId = 'teste-2h';
+        planoNome = 'Teste Grátis (2h)';
+        dataAssinatura = now.toISOString();
+        fimAssinatura = expiresAt.toISOString();
+        trialGranted = true;
+      }
+
       const senhaHash = hashPassword(senha);
       const user = db.createUser({ 
         username: cleanUsername, 
@@ -419,18 +582,54 @@ const server = http.createServer(async (req, res) => {
         telefone: cleanTelefone, 
         email, 
         senhaHash, 
-        cpf 
+        cpf,
+        assinaturaAtiva,
+        planoId,
+        planoNome,
+        limiteTelas: 1,
+        dataAssinatura,
+        fimAssinatura,
+        trialUsed: true,
+        trialIp: clientIp,
+        registrationIp: clientIp
       });
 
-      // Cria a sessão com limite de 1 tela por padrão (até assinar plano de 2 telas)
+      // Registra o IP na lista definitiva de IPs testados
+      db.recordTestedIp(clientIp, user.id, user.username);
+
+      // Registra auditoria de acesso
+      const ua = req.headers['user-agent'] || '';
+      const dev = parseDevice(ua);
+      db.recordAccess({
+        ip: clientIp,
+        userId: user.id,
+        username: user.username,
+        deviceType: dev.deviceType,
+        deviceModel: dev.deviceModel,
+        browser: dev.browser,
+        os: dev.os,
+        userAgent: ua,
+        path: '/cadastro'
+      });
+
+      // Cria a sessão com limite de 1 tela por padrão
       const session = db.createSession(user.id, deviceId, deviceInfo, user.limiteTelas || 1);
       const token = generateToken({ userId: user.id, sessionId: session.id });
+
+      let trialMessage = '';
+      if (trialGranted) {
+        trialMessage = '🎉 Bem-vindo! Seu teste gratuito de 2 horas foi ativado com sucesso. Aproveite todos os canais ao vivo, filmes e séries!';
+      } else {
+        trialMessage = 'Conta criada com sucesso! Notamos que este IP já utilizou o teste gratuito de 2 horas. Escolha um de nossos planos para ter acesso aos canais.';
+      }
 
       sendJson(res, 201, {
         token,
         sessionId: session.id,
         user: sanitizeUser(user),
-        message: 'Cadastro realizado com sucesso!'
+        trialGranted,
+        trialMessage,
+        message: trialMessage
       });
     } catch (err) {
       console.error('Erro no cadastro:', err);
@@ -439,7 +638,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // --- Login de Usuário (por Nome de Usuário ou E-mail) com Limite de Telas ---
+  // --- Login de Usuário com Limite de Telas e Validação de Teste Expirado ---
   if (pathname === '/api/auth/login' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
@@ -458,18 +657,45 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // Regra de telas simultâneas:
-      // Se plano tem 1 tela: desconecta qualquer outro dispositivo logado.
-      // Se plano tem 2 telas: se já houver 2 telas, desconecta a mais antiga.
+      // Validação de expiração de teste de 2 horas
+      const isSubActive = isUserSubscriptionActive(user);
+      const isTrialExpired = (user.planoId === 'teste-2h' && !isSubActive);
+      if (isTrialExpired) {
+        user.assinaturaAtiva = false;
+        db.updateUser(user.id, { assinaturaAtiva: false });
+      }
+
+      // Registra acesso do login
+      const clientIp = getClientIp(req);
+      const ua = req.headers['user-agent'] || '';
+      const dev = parseDevice(ua);
+      db.recordAccess({
+        ip: clientIp,
+        userId: user.id,
+        username: user.username,
+        deviceType: dev.deviceType,
+        deviceModel: dev.deviceModel,
+        browser: dev.browser,
+        os: dev.os,
+        userAgent: ua,
+        path: '/login'
+      });
+
       const maxScreens = user.limiteTelas || 1;
       const session = db.createSession(user.id, deviceId, deviceInfo, maxScreens);
       const token = generateToken({ userId: user.id, sessionId: session.id });
+
+      let loginNotice = 'Login realizado com sucesso!';
+      if (isTrialExpired) {
+        loginNotice = 'Seu período de teste gratuito de 2 horas encerrou. Para continuar assistindo, escolha um de nossos planos.';
+      }
 
       sendJson(res, 200, {
         token,
         sessionId: session.id,
         user: sanitizeUser(user),
-        message: 'Login realizado com sucesso!'
+        trialExpired: isTrialExpired,
+        message: loginNotice
       });
     } catch (err) {
       console.error('Erro no login:', err);
@@ -489,7 +715,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // --- Heartbeat de Sessão (Monitor de Desconexão por limite de telas) ---
+  // --- Heartbeat de Sessão (Monitor de Desconexão por limite de telas ou expiração de teste) ---
   if (pathname === '/api/auth/heartbeat' && req.method === 'POST') {
     const auth = authenticateUser(req);
     if (!auth) {
@@ -503,11 +729,16 @@ const server = http.createServer(async (req, res) => {
 
       const check = db.heartbeatSession(sessionId);
       if (!check.valid) {
+        const isTrialExp = check.reason === 'TRIAL_EXPIRED';
         sendJson(res, 403, { 
-          error: 'SESSION_TERMINATED', 
-          reason: check.reason === 'LOGGED_IN_ANOTHER_DEVICE'
-            ? 'Sua conta atingiu o limite de telas simultâneas e foi conectada em outro dispositivo.'
-            : 'Sua sessão foi encerrada.'
+          error: isTrialExp ? 'TRIAL_EXPIRED' : 'SESSION_TERMINATED', 
+          code: check.reason,
+          reason: isTrialExp
+            ? 'Seu período de teste gratuito de 2 horas encerrou. Para continuar assistindo aos mais de 400 canais, filmes e séries, assine agora um de nossos planos!'
+            : (check.reason === 'LOGGED_IN_ANOTHER_DEVICE'
+              ? 'Sua conta atingiu o limite de telas simultâneas e foi conectada em outro dispositivo.'
+              : 'Sua sessão foi encerrada.'),
+          expired: isTrialExp
         });
         return;
       }

@@ -127,10 +127,10 @@ export default function Navbar({
                   </span>
                   {currentUser.assinaturaAtiva ? (
                     <span
-                      className={`user-plan-pill active ${currentUser.planoId === 'vitalicio' ? 'master-badge' : ''}`}
-                      title={currentUser.planoId === 'vitalicio' ? 'Plano Master Vitalício Ilimitado' : `${currentUser.limiteTelas} tela(s)`}
+                      className={`user-plan-pill active ${currentUser.planoId === 'vitalicio' ? 'master-badge' : currentUser.planoId === 'teste-2h' ? 'trial-badge' : ''}`}
+                      title={currentUser.planoId === 'vitalicio' ? 'Plano Master Vitalício Ilimitado' : currentUser.planoId === 'teste-2h' ? 'Teste Grátis (2h)' : `${currentUser.limiteTelas} tela(s)`}
                     >
-                      {currentUser.planoId === 'vitalicio' ? '👑 Master' : `${currentUser.limiteTelas} Tela${currentUser.limiteTelas > 1 ? 's' : ''}`}
+                      {currentUser.planoId === 'vitalicio' ? '👑 Master' : currentUser.planoId === 'teste-2h' ? '⏱️ Teste 2h' : `${currentUser.limiteTelas} Tela${currentUser.limiteTelas > 1 ? 's' : ''}`}
                     </span>
                   ) : (
                     <span className="user-plan-pill expired">Sem Plano</span>
@@ -167,7 +167,11 @@ export default function Navbar({
                       </div>
                       {currentUser.assinaturaAtiva && currentUser.fimAssinatura && (
                         <div className="sub-date-row">
-                          {currentUser.planoId === 'vitalicio' ? 'Acesso Vitalício Permanente' : `Até ${new Date(currentUser.fimAssinatura).toLocaleDateString('pt-BR')}`}
+                          {currentUser.planoId === 'vitalicio' 
+                            ? 'Acesso Vitalício Permanente' 
+                            : currentUser.planoId === 'teste-2h'
+                            ? `Teste expira às ${new Date(currentUser.fimAssinatura).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                            : `Até ${new Date(currentUser.fimAssinatura).toLocaleDateString('pt-BR')}`}
                         </div>
                       )}
                     </div>
@@ -182,7 +186,7 @@ export default function Navbar({
                       }}
                     >
                       <Sparkles size={16} className="text-warning" />
-                      <span>{currentUser.assinaturaAtiva ? 'Gerenciar Planos' : 'Assinar Agora'}</span>
+                      <span>{currentUser.planoId === 'teste-2h' ? 'Assinar Plano Definitivo' : (currentUser.assinaturaAtiva ? 'Gerenciar Planos' : 'Assinar Agora')}</span>
                     </button>
 
                     <button

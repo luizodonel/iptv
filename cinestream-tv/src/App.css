@@ -3241,15 +3241,77 @@
 
   /* Navbar adjustments */
   .navbar-container {
-    height: 64px;
+    height: 60px;
   }
 
   .navbar-content {
-    padding: 0 14px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .brand-logo {
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .brand-title {
-    font-size: 19px;
+    font-size: 18px;
+    letter-spacing: -0.4px;
+  }
+
+  .brand-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+  }
+
+  .navbar-actions {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* Compact Plans Button on mobile */
+  .nav-plans-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    gap: 5px;
+  }
+
+  .nav-plans-btn span {
+    font-size: 12px;
+  }
+
+  /* Compact Login Button on mobile - Always visible and clickable */
+  .nav-login-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    gap: 5px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* Compact User Profile Button on mobile: keep avatar circle visible without overflowing */
+  .user-avatar-btn {
+    padding: 3px 6px 3px 3px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .user-avatar-btn .avatar-circle {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  /* Hide long username and plan pill on mobile navbar so avatar and controls fit perfectly */
+  .user-avatar-btn .user-name-label,
+  .user-avatar-btn .user-plan-pill {
+    display: none;
+  }
+
+  .user-dropdown-menu {
+    right: 0;
+    max-width: calc(100vw - 20px);
+    width: 250px;
   }
 
   .search-hint, .search-kbd {
@@ -3259,6 +3321,29 @@
   .search-trigger-btn {
     padding: 8px 12px;
     border-radius: 50%;
+  }
+
+  /* Hide top support button on mobile screens <= 640px because floating WhatsApp button is already active */
+  @media (max-width: 640px) {
+    .nav-support-btn {
+      display: none !important;
+    }
+  }
+
+  @media (max-width: 400px) {
+    .brand-title {
+      font-size: 16px;
+    }
+
+    .nav-plans-btn {
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+
+    .nav-login-btn {
+      padding: 5px 10px;
+      font-size: 12px;
+    }
   }
 
   /* Hero Banner */
@@ -5502,4 +5587,42 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* ==================== 2-HOUR TRIAL BANNERS ==================== */
+.auth-trial-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15);
+  margin-bottom: 12px;
+}
+
+.auth-trial-warn-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.15);
+  margin-bottom: 12px;
+}
+
+.user-plan-pill.trial-badge {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(234, 88, 12, 0.35));
+  color: #fde047;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
 }

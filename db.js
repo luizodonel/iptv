@@ -14,10 +14,24 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+export function normalizeIp(rawIp) {
+  if (!rawIp) return '127.0.0.1';
+  let clean = String(rawIp).trim();
+  if (clean.startsWith('::ffff:')) {
+    clean = clean.slice(7);
+  }
+  if (clean === '::1') {
+    clean = '127.0.0.1';
+  }
+  return clean;
+}
+
 const DEFAULT_DATA = {
   users: [],
   sessions: [],
-  pagamentos: []
+  pagamentos: [],
+  testedIps: [],
+  accessLogs: []
 };
 
 // Configuração do pool de conexão com PostgreSQL
@@ -35,7 +49,14 @@ class Database {
     try {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        return {
+          users: Array.isArray(parsed.users) ? parsed.users : [],
+          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+          pagamentos: Array.isArray(parsed.pagamentos) ? parsed.pagamentos : [],
+          testedIps: Array.isArray(parsed.testedIps) ? parsed.testedIps : [],
+          accessLogs: Array.isArray(parsed.accessLogs) ? parsed.accessLogs : []
+        };
       }
     } catch (err) {
       console.error('Erro ao ler database.json local:', err.message);
@@ -81,7 +102,10 @@ class Database {
           plano_nome VARCHAR(100),
           limite_telas INT DEFAULT 1,
           data_assinatura TIMESTAMPTZ,
-          fim_assinatura TIMESTAMPTZ
+          fim_assinatura TIMESTAMPTZ,
+          trial_used BOOLEAN DEFAULT FALSE,
+          trial_ip VARCHAR(64),
+          registration_ip VARCHAR(64)
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -108,13 +132,41 @@ class Database {
           data_criacao TIMESTAMPTZ DEFAULT NOW(),
           data_confirmacao TIMESTAMPTZ
         );
+
+        CREATE TABLE IF NOT EXISTS access_logs (
+          id VARCHAR(64) PRIMARY KEY,
+          ip VARCHAR(64) NOT NULL,
+          user_id VARCHAR(64),
+          username VARCHAR(100),
+          device_type VARCHAR(50),
+          device_model VARCHAR(100),
+          browser VARCHAR(50),
+          os VARCHAR(50),
+          user_agent TEXT,
+          path VARCHAR(255),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS tested_ips (
+          ip VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64),
+          username VARCHAR(100),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        -- Garantir migração de colunas na tabela users se já existia
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ip VARCHAR(64);
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_ip VARCHAR(64);
       `);
 
       // Carrega registros existentes no PostgreSQL para a memória
-      const [uRes, sRes, pRes] = await Promise.all([
+      const [uRes, sRes, pRes, tRes, aRes] = await Promise.all([
         this.pool.query('SELECT * FROM users;'),
         this.pool.query('SELECT * FROM sessions;'),
-        this.pool.query('SELECT * FROM pagamentos;')
+        this.pool.query('SELECT * FROM pagamentos;'),
+        this.pool.query('SELECT * FROM tested_ips;').catch(() => ({ rows: [] })),
+        this.pool.query('SELECT * FROM access_logs ORDER BY created_at DESC LIMIT 500;').catch(() => ({ rows: [] }))
       ]);
 
       if (uRes.rows.length > 0) {
@@ -132,7 +184,10 @@ class Database {
           planoNome: r.plano_nome,
           limiteTelas: r.limite_telas || 1,
           dataAssinatura: r.data_assinatura ? new Date(r.data_assinatura).toISOString() : null,
-          fimAssinatura: r.fim_assinatura ? new Date(r.fim_assinatura).toISOString() : null
+          fimAssinatura: r.fim_assinatura ? new Date(r.fim_assinatura).toISOString() : null,
+          trialUsed: Boolean(r.trial_used),
+          trialIp: r.trial_ip || null,
+          registrationIp: r.registration_ip || null
         }));
 
         this.data.sessions = sRes.rows.map(r => ({
@@ -159,9 +214,34 @@ class Database {
           dataCriacao: r.data_criacao ? new Date(r.data_criacao).toISOString() : new Date().toISOString(),
           dataConfirmacao: r.data_confirmacao ? new Date(r.data_confirmacao).toISOString() : null
         }));
-        console.log(`✅ PostgreSQL carregado com sucesso: ${uRes.rows.length} usuários, ${sRes.rows.length} sessões, ${pRes.rows.length} pagamentos.`);
+
+        if (tRes && tRes.rows.length > 0) {
+          this.data.testedIps = tRes.rows.map(r => ({
+            ip: normalizeIp(r.ip),
+            userId: r.user_id,
+            username: r.username,
+            createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+          }));
+        }
+
+        if (aRes && aRes.rows.length > 0) {
+          this.data.accessLogs = aRes.rows.map(r => ({
+            id: r.id,
+            ip: normalizeIp(r.ip),
+            userId: r.user_id,
+            username: r.username,
+            deviceType: r.device_type,
+            deviceModel: r.device_model,
+            browser: r.browser,
+            os: r.os,
+            userAgent: r.user_agent,
+            path: r.path,
+            createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+          }));
+        }
+
+        console.log(`✅ PostgreSQL carregado com sucesso: ${uRes.rows.length} usuários, ${sRes.rows.length} sessões, ${pRes.rows.length} pagamentos, ${this.data.testedIps.length} IPs testados, ${this.data.accessLogs.length} acessos recentes.`);
       } else if (this.data.users.length > 0) {
-        // Se o PostgreSQL estiver vazio, migra dados locais para o banco
         console.log('🔄 Migrando dados locais para o PostgreSQL...');
         for (const u of this.data.users) {
           await this.pgInsertUser(u);
@@ -171,6 +251,12 @@ class Database {
         }
         for (const p of this.data.pagamentos) {
           await this.pgInsertPagamento(p);
+        }
+        for (const t of this.data.testedIps) {
+          await this.pgInsertTestedIp(t);
+        }
+        for (const a of this.data.accessLogs) {
+          await this.pgInsertAccessLog(a);
         }
       }
 
@@ -185,8 +271,8 @@ class Database {
     if (!this.pool) return;
     try {
       await this.pool.query(`
-        INSERT INTO users (id, username, nome, telefone, email, senha_hash, cpf, created_at, assinatura_ativa, plano_id, plano_nome, limite_telas, data_assinatura, fim_assinatura)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO users (id, username, nome, telefone, email, senha_hash, cpf, created_at, assinatura_ativa, plano_id, plano_nome, limite_telas, data_assinatura, fim_assinatura, trial_used, trial_ip, registration_ip)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (id) DO UPDATE SET
           username = EXCLUDED.username,
           nome = EXCLUDED.nome,
@@ -197,11 +283,14 @@ class Database {
           plano_nome = EXCLUDED.plano_nome,
           limite_telas = EXCLUDED.limite_telas,
           data_assinatura = EXCLUDED.data_assinatura,
-          fim_assinatura = EXCLUDED.fim_assinatura;
+          fim_assinatura = EXCLUDED.fim_assinatura,
+          trial_used = EXCLUDED.trial_used,
+          trial_ip = EXCLUDED.trial_ip,
+          registration_ip = EXCLUDED.registration_ip;
       `, [
         u.id, u.username, u.nome, u.telefone, u.email, u.senhaHash, u.cpf,
         u.createdAt, u.assinaturaAtiva, u.planoId, u.planoNome, u.limiteTelas,
-        u.dataAssinatura, u.fimAssinatura
+        u.dataAssinatura, u.fimAssinatura, u.trialUsed || false, u.trialIp || null, u.registrationIp || null
       ]);
     } catch (err) {
       console.error('Erro pgInsertUser:', err.message);
@@ -246,6 +335,115 @@ class Database {
     }
   }
 
+  async pgInsertTestedIp(record) {
+    if (!this.pool) return;
+    try {
+      await this.pool.query(`
+        INSERT INTO tested_ips (ip, user_id, username, created_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (ip) DO NOTHING;
+      `, [record.ip, record.userId, record.username, record.createdAt]);
+    } catch (err) {
+      console.error('Erro pgInsertTestedIp:', err.message);
+    }
+  }
+
+  async pgInsertAccessLog(log) {
+    if (!this.pool) return;
+    try {
+      await this.pool.query(`
+        INSERT INTO access_logs (id, ip, user_id, username, device_type, device_model, browser, os, user_agent, path, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+      `, [
+        log.id, log.ip, log.userId, log.username, log.deviceType,
+        log.deviceModel, log.browser, log.os, log.userAgent,
+        log.path, log.createdAt
+      ]);
+    } catch (err) {
+      console.error('Erro pgInsertAccessLog:', err.message);
+    }
+  }
+
+  // --- Controle de IP e Teste Grátis de 2 Horas ---
+  hasIpUsedTest(rawIp) {
+    if (!rawIp) return false;
+    const cleanIp = normalizeIp(rawIp);
+    if (!cleanIp) return false;
+
+    // 1. Checa na lista de IPs testados
+    const inTested = (this.data.testedIps || []).some(entry => {
+      const eIp = typeof entry === 'string' ? entry : entry.ip;
+      return normalizeIp(eIp) === cleanIp;
+    });
+    if (inTested) return true;
+
+    // 2. Checa se algum usuário cadastrado já consumiu o teste por este IP
+    const inUsers = (this.data.users || []).some(u => {
+      if (!u.trialUsed && u.planoId !== 'teste-2h') return false;
+      return normalizeIp(u.trialIp) === cleanIp || normalizeIp(u.registrationIp) === cleanIp;
+    });
+    if (inUsers) return true;
+
+    return false;
+  }
+
+  recordTestedIp(rawIp, userId, username) {
+    if (!rawIp) return;
+    const cleanIp = normalizeIp(rawIp);
+    if (!this.data.testedIps) this.data.testedIps = [];
+
+    const existing = this.data.testedIps.find(e => {
+      const eIp = typeof e === 'string' ? e : e.ip;
+      return normalizeIp(eIp) === cleanIp;
+    });
+
+    if (!existing) {
+      const record = {
+        ip: cleanIp,
+        userId: userId || null,
+        username: username || null,
+        createdAt: new Date().toISOString()
+      };
+      this.data.testedIps.push(record);
+      this.saveLocal();
+      this.pgInsertTestedIp(record);
+    }
+  }
+
+  // --- Registro e Consulta de Acessos (Auditoria de Visitantes) ---
+  recordAccess(data) {
+    if (!this.data.accessLogs) this.data.accessLogs = [];
+    const cleanIp = normalizeIp(data.ip);
+
+    const logEntry = {
+      id: 'acc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      ip: cleanIp,
+      userId: data.userId || null,
+      username: data.username || null,
+      deviceType: data.deviceType || 'Desconhecido',
+      deviceModel: data.deviceModel || 'Desconhecido',
+      browser: data.browser || 'Desconhecido',
+      os: data.os || 'Desconhecido',
+      userAgent: (data.userAgent || '').slice(0, 500),
+      path: data.path || '/',
+      createdAt: new Date().toISOString()
+    };
+
+    // Mantém no máximo 5000 acessos em memória/json
+    this.data.accessLogs.unshift(logEntry);
+    if (this.data.accessLogs.length > 5000) {
+      this.data.accessLogs = this.data.accessLogs.slice(0, 5000);
+    }
+
+    this.saveLocal();
+    this.pgInsertAccessLog(logEntry);
+    return logEntry;
+  }
+
+  getAccessLogs(limit = 100) {
+    return (this.data.accessLogs || []).slice(0, limit);
+  }
+
   // --- Usuários ---
   findUserByUsername(username) {
     if (!username) return null;
@@ -286,12 +484,15 @@ class Database {
       senhaHash: userData.senhaHash,
       cpf: userData.cpf ? userData.cpf.replace(/\D/g, '') : '',
       createdAt: new Date().toISOString(),
-      assinaturaAtiva: false,
-      planoId: null,
-      planoNome: null,
-      limiteTelas: 1,
-      dataAssinatura: null,
-      fimAssinatura: null
+      assinaturaAtiva: userData.assinaturaAtiva !== undefined ? Boolean(userData.assinaturaAtiva) : false,
+      planoId: userData.planoId || null,
+      planoNome: userData.planoNome || null,
+      limiteTelas: userData.limiteTelas || 1,
+      dataAssinatura: userData.dataAssinatura || null,
+      fimAssinatura: userData.fimAssinatura || null,
+      trialUsed: Boolean(userData.trialUsed),
+      trialIp: userData.trialIp ? normalizeIp(userData.trialIp) : null,
+      registrationIp: userData.registrationIp ? normalizeIp(userData.registrationIp) : null
     };
 
     this.data.users.push(newUser);
@@ -388,17 +589,51 @@ class Database {
     if (!session.isActive) {
       return { valid: false, reason: session.terminatedReason || 'LOGGED_IN_ANOTHER_DEVICE' };
     }
+
+    // Validação automática de expiração de teste de 2 horas ou assinatura
+    const user = this.findUserById(session.userId);
+    if (user) {
+      const username = (user.username || '').toLowerCase().trim();
+      const isMaster = username === 'odonel' || user.role === 'admin' || user.isMaster;
+      
+      if (!isMaster) {
+        const now = new Date();
+        const end = user.fimAssinatura ? new Date(user.fimAssinatura) : null;
+        const isExpired = !user.assinaturaAtiva || !end || now >= end;
+
+        if (isExpired) {
+          session.isActive = false;
+          session.terminatedReason = user.planoId === 'teste-2h' ? 'TRIAL_EXPIRED' : 'SUBSCRIPTION_EXPIRED';
+          session.terminatedAt = now.toISOString();
+          user.assinaturaAtiva = false;
+
+          this.saveLocal();
+          this.pgInsertSession(session);
+          this.pgInsertUser(user);
+
+          return { 
+            valid: false, 
+            reason: session.terminatedReason,
+            isTrialExpired: user.planoId === 'teste-2h',
+            message: user.planoId === 'teste-2h'
+              ? 'Seu período de teste gratuito de 2 horas encerrou. Para continuar assistindo, assine um de nossos planos!'
+              : 'Sua assinatura expirou. Renove seu plano para continuar assistindo.'
+          };
+        }
+      }
+    }
+
     session.lastHeartbeat = new Date().toISOString();
     this.saveLocal();
     this.pgInsertSession(session);
     return { valid: true };
   }
 
-  terminateSession(sessionId) {
+  terminateSession(sessionId, reason = 'LOGGED_OUT') {
     const session = this.findSession(sessionId);
     if (session) {
       session.isActive = false;
-      session.terminatedReason = 'LOGGED_OUT';
+      session.terminatedReason = reason;
       session.terminatedAt = new Date().toISOString();
       this.saveLocal();
       this.pgInsertSession(session);

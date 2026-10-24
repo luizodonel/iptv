@@ -151,6 +151,21 @@ export default function App() {
     updateSecurityUser(currentUser);
   }, [currentUser]);
 
+  // Registra o acesso do visitante no banco de dados (IP, Horário e Dispositivo)
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('cinestream_token');
+      fetch('/api/tracking/access', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ path: window.location.pathname })
+      }).catch(() => {});
+    } catch (_) {}
+  }, []);
+
   // Monitora detecção de DevTools / F12 para exibir escudo de proteção
   useEffect(() => {
     const handleDevToolsAlert = (e) => {

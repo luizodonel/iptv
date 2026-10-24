@@ -12,6 +12,19 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [ipTrialInfo, setIpTrialInfo] = useState({ checked: false, canTrial: true, hasUsedTest: false });
+
+  // Checa elegibilidade do IP para o teste de 2 horas
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/auth/check-ip-trial')
+        .then(r => r.json())
+        .then(data => {
+          setIpTrialInfo({ checked: true, canTrial: data.canTrial, hasUsedTest: data.hasUsedTest });
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   // Sincroniza o modo e reseta campos sempre que a modal for aberta
   useEffect(() => {
@@ -169,6 +182,20 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
             Criar Conta
           </button>
         </div>
+
+        {mode === 'register' && ipTrialInfo.checked && (
+          ipTrialInfo.canTrial ? (
+            <div className="auth-trial-banner fade-in">
+              <Sparkles size={16} className="text-emerald" />
+              <span>🎁 <strong>Teste Grátis de 2 Horas</strong> disponível para este dispositivo!</span>
+            </div>
+          ) : (
+            <div className="auth-trial-warn-banner fade-in">
+              <AlertCircle size={16} className="text-warning" />
+              <span>⚠️ Este IP já utilizou o teste gratuito de 2h. Para assistir, será cobrada assinatura.</span>
+            </div>
+          )
+        )}
 
         {errorMsg && (
           <div className="auth-error-banner shake">

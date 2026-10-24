@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { MonitorX, AlertTriangle, ArrowRight, Sparkles, LogIn } from 'lucide-react';
+import { MonitorX, AlertTriangle, ArrowRight, Sparkles, LogIn, Clock, CreditCard } from 'lucide-react';
 
 export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUpgradePlans }) {
   useEffect(() => {
@@ -13,6 +13,10 @@ export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUp
 
   if (!isOpen) return null;
 
+  const isTrialExpired = (reason || '').toLowerCase().includes('teste') || 
+                        (reason || '').toLowerCase().includes('2 horas') ||
+                        (reason || '').toLowerCase().includes('trial');
+
   return (
     <div className="modal-backdrop fade-in" style={{ zIndex: 9999 }}>
       <div 
@@ -21,10 +25,16 @@ export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUp
         aria-modal="true"
       >
         <div className="kicked-icon-wrap">
-          <MonitorX size={44} className="text-warning pulse-glow" />
+          {isTrialExpired ? (
+            <Clock size={44} className="text-warning pulse-glow" style={{ color: '#f59e0b' }} />
+          ) : (
+            <MonitorX size={44} className="text-warning pulse-glow" />
+          )}
         </div>
 
-        <h2 className="kicked-title">Sessão Desconectada</h2>
+        <h2 className="kicked-title">
+          {isTrialExpired ? 'Período de Teste Encerrado' : 'Sessão Desconectada'}
+        </h2>
         
         <p className="kicked-desc">
           {reason || 'Sua conta atingiu o limite de telas simultâneas do seu plano e foi conectada em outro dispositivo.'}
@@ -32,9 +42,21 @@ export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUp
 
         <div className="kicked-tips-box glass-card">
           <div className="tip-row">
-            <AlertTriangle size={16} className="text-warning flex-shrink-0" />
+            {isTrialExpired ? (
+              <CreditCard size={18} className="text-warning flex-shrink-0" style={{ color: '#10b981' }} />
+            ) : (
+              <AlertTriangle size={16} className="text-warning flex-shrink-0" />
+            )}
             <span>
-              Caso você tenha o plano de <strong>1 tela</strong>, ao conectar em um novo aparelho, o anterior é desconectado automaticamente.
+              {isTrialExpired ? (
+                <>
+                  Esperamos que tenha gostado do <strong>CineStream TV</strong>! Para continuar assistindo aos mais de 400 canais, filmes e séries, escolha um de nossos planos com <strong>liberação instantânea via Pix</strong>.
+                </>
+              ) : (
+                <>
+                  Caso você tenha o plano de <strong>1 tela</strong>, ao conectar em um novo aparelho, o anterior é desconectado automaticamente.
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -47,7 +69,7 @@ export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUp
               onClick={onUpgradePlans}
             >
               <Sparkles size={18} />
-              <span>Fazer Upgrade para 2 Telas</span>
+              <span>{isTrialExpired ? 'Assinar Agora com Pix' : 'Fazer Upgrade para 2 Telas'}</span>
             </button>
           )}
 
@@ -57,7 +79,7 @@ export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUp
             onClick={onReLogin}
           >
             <LogIn size={18} />
-            <span>Entrar Novamente</span>
+            <span>Entrar com Outra Conta</span>
           </button>
         </div>
       </div>
