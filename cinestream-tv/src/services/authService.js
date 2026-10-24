@@ -284,3 +284,18 @@ export async function fetchMasterLogs(limit = 200) {
   if (!res.ok) throw new Error(data.error || 'Erro ao carregar logs de acesso.');
   return data.logs || [];
 }
+
+export async function resetMasterUserPassword({ userId, newPassword, kickSessions = true }) {
+  const token = getAuthToken();
+  const res = await fetch('/api/master/users/reset-password', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ userId, newPassword, kickSessions })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao redefinir senha do usuário.');
+  return data;
+}

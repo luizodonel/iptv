@@ -581,7 +581,57 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 4. Derrubar Sessão(ões) Ativa(s) de Usuário
+  // 4. Redefinir Senha de Usuário pelo Master
+  if (pathname === '/api/master/users/reset-password' && req.method === 'POST') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { userId, newPassword, kickSessions } = body;
+
+      if (!userId) {
+        sendJson(res, 400, { error: 'userId é obrigatório.' });
+        return;
+      }
+
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 4) {
+        sendJson(res, 400, { error: 'A nova senha deve ter no mínimo 4 caracteres.' });
+        return;
+      }
+
+      const targetUser = db.findUserById(userId);
+      if (!targetUser) {
+        sendJson(res, 404, { error: 'Usuário não encontrado.' });
+        return;
+      }
+
+      const targetUsername = (targetUser.username || '').toLowerCase().trim();
+      const masterUsername = (auth.user.username || '').toLowerCase().trim();
+
+      // Proteção de segurança: Não permitir que outros alterem a conta master 'odonel'
+      if (targetUsername === 'odonel' && masterUsername !== 'odonel') {
+        sendJson(res, 403, { error: 'Apenas o próprio usuário Master Odonel pode alterar sua própria senha.' });
+        return;
+      }
+
+      const cleanPassword = newPassword.trim();
+      const senhaHash = hashPassword(cleanPassword);
+
+      db.setMasterUserPassword(userId, senhaHash, kickSessions !== false);
+
+      sendJson(res, 200, {
+        success: true,
+        message: `Senha do usuário @${targetUser.username} redefinida com sucesso!`
+      });
+    } catch (err) {
+      console.error('Erro ao redefinir senha do usuário (Master):', err);
+      sendJson(res, 500, { error: 'Erro ao redefinir senha: ' + err.message });
+    }
+    return;
+  }
+
+  // 5. Derrubar Sessão(ões) Ativa(s) de Usuário
   if (pathname === '/api/master/sessions/kick' && req.method === 'POST') {
     const auth = requireMasterAuth(req, res);
     if (!auth) return;

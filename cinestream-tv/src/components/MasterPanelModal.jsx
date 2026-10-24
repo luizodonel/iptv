@@ -28,7 +28,14 @@ import {
   ArrowRight,
   ExternalLink,
   SlidersHorizontal,
-  Info
+  Info,
+  Key,
+  Lock,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  Sparkles
 } from 'lucide-react';
 
 import {
@@ -36,7 +43,8 @@ import {
   fetchMasterUsers,
   updateMasterUserStatus,
   kickMasterSession,
-  fetchMasterLogs
+  fetchMasterLogs,
+  resetMasterUserPassword
 } from '../services/authService';
 
 import { isMasterUser } from '../services/securityService';
@@ -73,6 +81,14 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
   // Modal de Confirmação para Derrubar Sessão
   const [kickModalData, setKickModalData] = useState(null); // { userId, sessionId, userName, deviceInfo }
   const [kickingSession, setKickingSession] = useState(false);
+
+  // Modal de Redefinição de Senha de Usuário
+  const [resetPasswordUser, setResetPasswordUser] = useState(null);
+  const [newPasswordValue, setNewPasswordValue] = useState('');
+  const [showPasswordText, setShowPasswordText] = useState(false);
+  const [resetKickSessions, setResetKickSessions] = useState(true);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   // Auto-refresh a cada 25 segundos se o painel estiver aberto
   useEffect(() => {
@@ -252,6 +268,55 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
       alert('Erro ao derrubar sessão: ' + err.message);
     } finally {
       setKickingSession(false);
+    }
+  };
+
+  // 5. Redefinir Senha de Usuário
+  const handleOpenResetPassword = (user) => {
+    setResetPasswordUser(user);
+    setNewPasswordValue('');
+    setShowPasswordText(false);
+    setResetKickSessions(true);
+    setCopiedPassword(false);
+  };
+
+  const generateRandomPassword = () => {
+    const num = Math.floor(1000 + Math.random() * 9000);
+    const pass = `Cine${num}@`;
+    setNewPasswordValue(pass);
+    setShowPasswordText(true);
+  };
+
+  const handleCopyPassword = () => {
+    if (!newPasswordValue) return;
+    navigator.clipboard?.writeText(newPasswordValue);
+    setCopiedPassword(true);
+    setTimeout(() => setCopiedPassword(false), 2500);
+  };
+
+  const handleSaveResetPassword = async () => {
+    if (!resetPasswordUser) return;
+    if (!newPasswordValue || newPasswordValue.trim().length < 4) {
+      alert('A nova senha deve ter pelo menos 4 caracteres.');
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await resetMasterUserPassword({
+        userId: resetPasswordUser.id,
+        newPassword: newPasswordValue.trim(),
+        kickSessions: resetKickSessions
+      });
+
+      showToast(`Senha do usuário @${resetPasswordUser.username} redefinida com sucesso!`);
+      setResetPasswordUser(null);
+      setNewPasswordValue('');
+      loadAllData(true);
+    } catch (err) {
+      alert('Erro ao redefinir senha: ' + err.message);
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -677,6 +742,16 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
                           >
                             <Calendar size={16} />
                             <span>Definir Período</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-action-password"
+                            onClick={() => handleOpenResetPassword(user)}
+                            title="Redefinir senha de acesso deste usuário"
+                          >
+                            <Key size={16} />
+                            <span>Redefinir Senha</span>
                           </button>
 
                           {user.activeSessions && user.activeSessions.length > 0 && (
@@ -1127,6 +1202,144 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
                   disabled={kickingSession}
                 >
                   {kickingSession ? 'Derrubando...' : 'Sim, Derrubar Agora'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== MODAL: REDEFINIR SENHA DO USUÁRIO ==================== */}
+        {resetPasswordUser && (
+          <div className="sub-modal-backdrop fade-in" style={{ zIndex: 100000 }}>
+            <div className="reset-password-dialog glass-card scale-up">
+              <div className="dialog-header-row">
+                <div className="dialog-title-group">
+                  <div className="dialog-icon-badge">
+                    <Key size={22} color="#c084fc" />
+                  </div>
+                  <div>
+                    <h3 className="dialog-title">Redefinir Senha</h3>
+                    <span className="dialog-sub">
+                      Usuário: <strong>@{resetPasswordUser.username}</strong>
+                      {resetPasswordUser.nome && resetPasswordUser.nome !== resetPasswordUser.username ? ` (${resetPasswordUser.nome})` : ''}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="dialog-close-btn"
+                  onClick={() => setResetPasswordUser(null)}
+                  title="Fechar"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="dialog-body">
+                <div className="form-group-custom">
+                  <label className="input-field-label">Nova Senha de Acesso:</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showPasswordText ? "text" : "password"}
+                      value={newPasswordValue}
+                      onChange={(e) => setNewPasswordValue(e.target.value)}
+                      placeholder="Digite a nova senha (mínimo 4 caracteres)"
+                      className="dialog-password-input"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      className="btn-input-icon"
+                      onClick={() => setShowPasswordText(!showPasswordText)}
+                      title={showPasswordText ? "Ocultar senha" : "Ver senha"}
+                    >
+                      {showPasswordText ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Ferramentas Rápidas: Gerar Sugestão e Copiar */}
+                <div className="password-quick-tools">
+                  <button
+                    type="button"
+                    className="btn-tool-pill"
+                    onClick={generateRandomPassword}
+                    title="Gerar automaticamente uma senha segura"
+                  >
+                    <Sparkles size={14} color="#fde047" />
+                    <span>Gerar Senha Segura</span>
+                  </button>
+
+                  {newPasswordValue && (
+                    <button
+                      type="button"
+                      className="btn-tool-pill"
+                      onClick={handleCopyPassword}
+                      title="Copiar senha digitada"
+                    >
+                      {copiedPassword ? (
+                        <>
+                          <Check size={14} color="#10b981" />
+                          <span style={{ color: '#10b981' }}>Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} />
+                          <span>Copiar Senha</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {/* Opção para desconectar sessões */}
+                <label className="kick-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={resetKickSessions}
+                    onChange={(e) => setResetKickSessions(e.target.checked)}
+                  />
+                  <span>Desconectar aparelhos ativos do usuário (exigir nova senha)</span>
+                </label>
+
+                {/* Compartilhamento via WhatsApp caso o usuário tenha telefone cadastrado */}
+                {resetPasswordUser.telefone && newPasswordValue && (
+                  <div className="whatsapp-share-box">
+                    <div className="whatsapp-share-header">
+                      <MessageCircle size={15} color="#25D366" />
+                      <span>Enviar nova senha pelo WhatsApp:</span>
+                    </div>
+                    <a
+                      href={`https://wa.me/55${(resetPasswordUser.telefone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${resetPasswordUser.nome || resetPasswordUser.username}, sua nova senha de acesso no Top Canais / CineStream é:\n\n🔐 Senha: ${newPasswordValue}\n\nAcesse agora: https://topcanais.tv`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-whatsapp-share"
+                    >
+                      <MessageCircle size={15} />
+                      <span>Enviar no WhatsApp ({resetPasswordUser.telefone})</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              <div className="dialog-footer">
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => setResetPasswordUser(null)}
+                  disabled={savingPassword}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn-glow-primary"
+                  onClick={handleSaveResetPassword}
+                  disabled={savingPassword || !newPasswordValue}
+                >
+                  <Lock size={15} />
+                  <span>{savingPassword ? 'Salvando...' : 'Salvar Nova Senha'}</span>
                 </button>
               </div>
             </div>

@@ -278,6 +278,7 @@ class Database {
           nome = EXCLUDED.nome,
           telefone = EXCLUDED.telefone,
           email = EXCLUDED.email,
+          senha_hash = EXCLUDED.senha_hash,
           assinatura_ativa = EXCLUDED.assinatura_ativa,
           plano_id = EXCLUDED.plano_id,
           plano_nome = EXCLUDED.plano_nome,
@@ -759,6 +760,21 @@ class Database {
       if (kickSessions) {
         this.terminateUserSessions(userId, 'Sua assinatura foi inativada pelo usuário Master.');
       }
+    }
+
+    this.saveLocal();
+    this.pgInsertUser(user);
+    return user;
+  }
+
+  setMasterUserPassword(userId, senhaHash, kickSessions = true) {
+    const user = this.findUserById(userId);
+    if (!user) return null;
+
+    user.senhaHash = senhaHash;
+
+    if (kickSessions) {
+      this.terminateUserSessions(userId, 'Sua senha foi redefinida pelo usuário Master Odonel. Faça login novamente.');
     }
 
     this.saveLocal();
