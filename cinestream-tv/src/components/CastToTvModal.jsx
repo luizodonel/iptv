@@ -9,10 +9,20 @@ import {
   ExternalLink, 
   QrCode, 
   Sparkles, 
-  HelpCircle,
-  Smartphone,
-  Monitor
+  Smartphone, 
+  Play, 
+  Square, 
+  Pause,
+  Wifi,
+  Cast as CastIcon,
+  HelpCircle
 } from 'lucide-react';
+import { 
+  startCastMedia, 
+  stopCastSession, 
+  toggleCastPlayPause, 
+  subscribeCastStatus 
+} from '../services/castService';
 
 export default function CastToTvModal({ 
   isOpen, 
@@ -23,60 +33,91 @@ export default function CastToTvModal({
 }) {
   const [copied, setCopied] = useState(false);
   const [copiedWeb, setCopiedWeb] = useState(false);
-  const [activeMethod, setActiveMethod] = useState('smart'); // 'smart' | 'airplay' | 'web' | 'direct'
+  const [activeMethod, setActiveMethod] = useState('smart'); // 'smart' | 'mirror' | 'airplay' | 'web' | 'direct'
   const [castStatus, setCastStatus] = useState('');
+  const [isCasting, setIsCasting] = useState(false);
+  const [castInfo, setCastInfo] = useState({
+    isReady: false,
+    isConnected: false,
+    deviceName: '',
+    state: 'NOT_CONNECTED'
+  });
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      setCastStatus('');
-      return () => {
-        document.body.style.overflow = '';
-      };
-    }
+    if (!isOpen) return;
+
+    document.body.style.overflow = 'hidden';
+    setCastStatus('');
+
+    // Escuta atualizações do estado do Google Cast
+    const unsubscribe = subscribeCastStatus((status) => {
+      setCastInfo(status);
+      if (status.isConnected) {
+        setCastStatus(`🟢 Conectado e transmitindo para: ${status.deviceName || 'Smart TV'}`);
+      }
+    });
+
+    return () => {
+      document.body.style.overflow = '';
+      unsubscribe();
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const title = item?.name || item?.cleanTitle || item?.title || 'Conteúdo';
   const subtitle = item?.category || (item?.year ? `(${item?.year})` : 'Transmissão');
+  const isLive = Boolean(item?.isLive || !item?.year);
 
   // URL para abrir direto no navegador da Smart TV
   const currentWebUrl = window.location.href;
   const qrCodeUrl = `https://api.quickchart.io/qr?text=${encodeURIComponent(currentWebUrl)}&size=200&dark=ffffff&light=111827`;
 
-  // 1. Google Cast / Remote Playback API
-  const handleRemotePlaybackCast = async () => {
-    setCastStatus('Iniciando transmissão...');
+  // 1. Dispara o seletor nativo do Google Cast para escolher a TV
+  const handleStartCast = async () => {
+    setIsCasting(true);
+    setCastStatus('🔍 Procurando Smart TVs no seu Wi-Fi...');
     try {
-      if (videoElement && videoElement.remote && typeof videoElement.remote.prompt === 'function') {
-        await videoElement.remote.prompt();
-        setCastStatus('✅ Dispositivo de transmissão selecionado!');
-      } else if (window.chrome && window.chrome.cast && window.chrome.cast.isAvailable) {
-        setCastStatus('Iniciando Google Cast...');
-      } else {
-        // Tenta Presentation API ou informa instrução
-        if (navigator.presentation && navigator.presentation.defaultRequest) {
-          await navigator.presentation.defaultRequest.start();
-          setCastStatus('✅ Tela conectada!');
+      const res = await startCastMedia({
+        streamUrl,
+        item,
+        isLive,
+        videoElement
+      });
+
+      if (res?.cancelled) {
+        setCastStatus('');
+      } else if (res?.success) {
+        if (res.type === 'google_cast') {
+          setCastStatus(`🟢 Transmitindo na TV: ${res.device || 'Smart TV'}`);
+        } else if (res.type === 'airplay') {
+          setCastStatus('🍏 Menu AirPlay aberto! Escolha sua Smart TV.');
         } else {
-          setCastStatus('⚠️ O seletor de transmissão automática não é suportado pelo seu navegador atual. Use o botão de três pontos do Chrome/Edge > "Transmitir" ou abra o link na TV.');
+          setCastStatus('✅ Transmissão iniciada na TV!');
         }
       }
     } catch (err) {
-      console.warn('Erro ao disparar transmissão remota:', err);
-      setCastStatus('Transmissão cancelada ou não concluída.');
+      console.warn('Erro ao conectar com a TV:', err);
+      setCastStatus(err.message || 'Não foi possível encontrar a TV. Verifique se estão no mesmo Wi-Fi.');
+    } finally {
+      setIsCasting(false);
     }
   };
 
-  // 2. Apple AirPlay
+  // 2. Desconecta da TV
+  const handleStopCast = () => {
+    stopCastSession();
+    setCastStatus('Transmissão encerrada.');
+  };
+
+  // 3. Apple AirPlay
   const handleAirPlay = () => {
     try {
       if (videoElement && typeof videoElement.webkitShowPlaybackTargetPicker === 'function') {
         videoElement.webkitShowPlaybackTargetPicker();
-        setCastStatus('🍏 Menu AirPlay aberto! Escolha sua Smart TV ou Apple TV.');
+        setCastStatus('🍏 Menu AirPlay aberto! Escolha sua TV.');
       } else {
-        setCastStatus('⚠️ Apple AirPlay só está disponível no navegador Safari / iOS. No Android ou Windows, utilize a opção Chromecast ou Web TV.');
+        setCastStatus('⚠️ Apple AirPlay só está disponível no Safari (iPhone, iPad ou Mac). No Android ou Windows, utilize a aba "Smart TV / Cast".');
       }
     } catch (err) {
       console.warn('Erro ao disparar AirPlay:', err);
@@ -111,7 +152,7 @@ export default function CastToTvModal({
         <div className="cast-modal-header">
           <div className="cast-header-icon-wrap">
             <Tv size={26} className="text-accent" />
-            <span className="cast-pulse-signal"></span>
+            <span className={`cast-pulse-signal ${castInfo.isConnected ? 'connected' : ''}`}></span>
           </div>
           <div className="cast-header-text">
             <h2 className="cast-modal-title">Transmitir para a TV</h2>
@@ -129,14 +170,46 @@ export default function CastToTvModal({
           </button>
         </div>
 
-        {/* Status feedback pill */}
+        {/* Feedback pill */}
         {castStatus && (
-          <div className="cast-status-pill">
+          <div className={`cast-status-pill ${castInfo.isConnected ? 'is-connected' : ''}`}>
             <span>{castStatus}</span>
           </div>
         )}
 
-        {/* Transmit Options Grid / Tabs */}
+        {/* Card de Sessão Ativa na TV (quando já conectado) */}
+        {castInfo.isConnected && (
+          <div className="cast-active-device-banner">
+            <div className="active-device-info">
+              <Tv size={22} className="text-success" />
+              <div>
+                <strong>Transmitindo na TV</strong>
+                <span>{castInfo.deviceName || 'Dispositivo Conectado'}</span>
+              </div>
+            </div>
+            <div className="active-device-actions">
+              <button 
+                type="button"
+                className="btn-cast-ctrl"
+                onClick={toggleCastPlayPause}
+                title="Pausar / Retomar na TV"
+              >
+                <Pause size={16} />
+              </button>
+              <button 
+                type="button"
+                className="btn-cast-ctrl danger"
+                onClick={handleStopCast}
+                title="Desconectar"
+              >
+                <Square size={16} />
+                <span>Desconectar</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Métodos de Transmissão */}
         <div className="cast-methods-tabs">
           <button 
             type="button"
@@ -144,7 +217,15 @@ export default function CastToTvModal({
             onClick={() => setActiveMethod('smart')}
           >
             <Cast size={18} />
-            <span>Chromecast / Cast</span>
+            <span>Smart TV / Cast</span>
+          </button>
+          <button 
+            type="button"
+            className={`cast-tab-btn ${activeMethod === 'mirror' ? 'active' : ''}`}
+            onClick={() => setActiveMethod('mirror')}
+          >
+            <Smartphone size={18} />
+            <span>Espelhar Celular</span>
           </button>
           <button 
             type="button"
@@ -160,55 +241,101 @@ export default function CastToTvModal({
             onClick={() => setActiveMethod('web')}
           >
             <QrCode size={18} />
-            <span>Web Smart TV</span>
-          </button>
-          <button 
-            type="button"
-            className={`cast-tab-btn ${activeMethod === 'direct' ? 'active' : ''}`}
-            onClick={() => setActiveMethod('direct')}
-          >
-            <Radio size={18} />
-            <span>Link Stream</span>
+            <span>Web TV / App</span>
           </button>
         </div>
 
-        {/* Content depending on activeMethod */}
+        {/* Conteúdo da Aba Selecionada */}
         <div className="cast-tab-content">
+          {/* 1. SMART TV & GOOGLE CAST */}
           {activeMethod === 'smart' && (
             <div className="cast-method-panel">
               <div className="method-instruction">
                 <p>
-                  Transmita instantaneamente para <strong>Chromecast, Android TV, Google TV, Samsung ou LG Smart TV</strong> conectadas na mesma rede Wi-Fi.
+                  Transmissão direta via <strong>Google Cast / Smart TV</strong>. 
+                  Ao clicar abaixo, o navegador listará as TVs disponíveis no seu Wi-Fi para você conectar com 1 clique.
                 </p>
               </div>
 
-              <button 
-                type="button" 
-                className="btn-glow-primary cast-action-btn"
-                onClick={handleRemotePlaybackCast}
-              >
-                <Cast size={20} />
-                <span>Iniciar Transmissão na TV</span>
-              </button>
+              {!castInfo.isConnected ? (
+                <button 
+                  type="button" 
+                  className="btn-glow-primary cast-action-btn"
+                  onClick={handleStartCast}
+                  disabled={isCasting}
+                >
+                  <Cast size={20} className={isCasting ? 'animate-spin' : ''} />
+                  <span>{isCasting ? 'Procurando Smart TVs...' : 'Conectar à Smart TV (Cast)'}</span>
+                </button>
+              ) : (
+                <button 
+                  type="button" 
+                  className="btn-glow-primary cast-action-btn"
+                  style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                  onClick={handleStartCast}
+                >
+                  <Check size={20} />
+                  <span>Alterar TV Conectada</span>
+                </button>
+              )}
 
               <div className="cast-hints-box">
                 <div className="hint-item">
                   <span className="hint-bullet">1.</span>
-                  <span>Certifique-se de que a sua TV e o celular estão conectados no <strong>mesmo Wi-Fi</strong>.</span>
+                  <span>O celular/computador e a sua Smart TV precisam estar no <strong>mesmo Wi-Fi</strong>.</span>
                 </div>
                 <div className="hint-item">
                   <span className="hint-bullet">2.</span>
-                  <span>No navegador Google Chrome no celular ou PC, você também pode tocar no menu de 3 pontos ⋮ e selecionar <strong>"Transmitir..."</strong>.</span>
+                  <span>Compatível com <strong>Chromecast, Android TV, Google TV, TVs Philips, TCL, Samsung e LG</strong>.</span>
                 </div>
               </div>
             </div>
           )}
 
+          {/* 2. ESPELHAR TELA DO CELULAR (SMART VIEW / TRANSMITIR ANDROID) */}
+          {activeMethod === 'mirror' && (
+            <div className="cast-method-panel">
+              <div className="method-instruction">
+                <p>
+                  A forma mais rápida no celular sem precisar de navegador na TV: 
+                  use a <strong>transmissão nativa do seu smartphone</strong>.
+                </p>
+              </div>
+
+              <div className="cast-mirror-steps">
+                <div className="mirror-step-card">
+                  <div className="step-num">1</div>
+                  <div className="step-content">
+                    <strong>Arraste para baixo</strong>
+                    <p>Puxe a barra de notificações do topo da tela do seu celular.</p>
+                  </div>
+                </div>
+
+                <div className="mirror-step-card">
+                  <div className="step-num">2</div>
+                  <div className="step-content">
+                    <strong>Toque em Transmitir / Smart View</strong>
+                    <p>No <strong>Samsung</strong> é <em>Smart View</em>. Na <strong>Motorola/Xiaomi</strong> é <em>Transmitir / Emitir</em>.</p>
+                  </div>
+                </div>
+
+                <div className="mirror-step-card">
+                  <div className="step-num">3</div>
+                  <div className="step-content">
+                    <strong>Escolha sua Smart TV</strong>
+                    <p>A TV aceitará na hora e a tela do filme/canal passará em tela cheia na TV!</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. APPLE AIRPLAY */}
           {activeMethod === 'airplay' && (
             <div className="cast-method-panel">
               <div className="method-instruction">
                 <p>
-                  Transmita via <strong>Apple AirPlay</strong> direto do iPhone, iPad ou Mac para Smart TVs compatíveis (Apple TV, Samsung, LG, Roku, Sony).
+                  Transmita via <strong>Apple AirPlay</strong> do iPhone, iPad ou Mac para Smart TVs compatíveis (Apple TV, Samsung, LG, Roku, Sony).
                 </p>
               </div>
 
@@ -225,17 +352,18 @@ export default function CastToTvModal({
               <div className="cast-hints-box">
                 <div className="hint-item">
                   <span className="hint-bullet">•</span>
-                  <span>Disponível nativamente no Safari no iPhone/iPad. Na central de controle do iOS, você também pode tocar em <strong>"Espelhar a Tela"</strong>.</span>
+                  <span>No iPhone, você também pode abrir a <strong>Central de Controle</strong> e tocar no ícone de dois retângulos (<strong>Espelhar a Tela</strong>).</span>
                 </div>
               </div>
             </div>
           )}
 
+          {/* 4. WEB TV & APP DE IPTV */}
           {activeMethod === 'web' && (
             <div className="cast-method-panel">
               <div className="method-instruction">
                 <p>
-                  Abra o navegador da sua <strong>Smart TV (Samsung Tizen, LG webOS, Fire TV, Roku)</strong> e aponte a câmera ou acesse o endereço abaixo:
+                  Abra na Smart TV apontando a câmera para o QR Code ou use o link direto em aplicativos como <strong>IPTV Smarters, Smart IPTV ou SS IPTV</strong>:
                 </p>
               </div>
 
@@ -246,49 +374,19 @@ export default function CastToTvModal({
                   className="cast-qr-image"
                   loading="lazy"
                 />
-                <span className="qr-caption">Aponte a câmera ou abra na TV</span>
+                <span className="qr-caption">Aponte a câmera da TV ou celular</span>
               </div>
 
               <div className="cast-url-copy-box">
-                <span className="cast-url-text">{currentWebUrl}</span>
+                <span className="cast-url-text">{streamUrl || currentWebUrl}</span>
                 <button 
                   type="button" 
                   className="cast-copy-btn"
-                  onClick={handleCopyWeb}
+                  onClick={streamUrl ? handleCopyStream : handleCopyWeb}
                 >
-                  {copiedWeb ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
-                  <span>{copiedWeb ? 'Copiado!' : 'Copiar'}</span>
+                  {(copied || copiedWeb) ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
+                  <span>{(copied || copiedWeb) ? 'Copiado!' : 'Copiar Link'}</span>
                 </button>
-              </div>
-            </div>
-          )}
-
-          {activeMethod === 'direct' && (
-            <div className="cast-method-panel">
-              <div className="method-instruction">
-                <p>
-                  Link direto da transmissão (M3U8 / HLS) para usar em aplicativos de IPTV na sua TV (como <strong>Smart IPTV, IPTV Smarters, SS IPTV, VLC ou Kodi</strong>):
-                </p>
-              </div>
-
-              <div className="cast-url-copy-box">
-                <span className="cast-url-text">{streamUrl || 'URL não disponível'}</span>
-                <button 
-                  type="button" 
-                  className="cast-copy-btn"
-                  onClick={handleCopyStream}
-                  disabled={!streamUrl}
-                >
-                  {copied ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
-                  <span>{copied ? 'Copiado!' : 'Copiar Link'}</span>
-                </button>
-              </div>
-
-              <div className="cast-hints-box">
-                <div className="hint-item">
-                  <span className="hint-bullet">•</span>
-                  <span>Cole este link no campo "Adicionar URL de Transmissão" no player da sua TV.</span>
-                </div>
               </div>
             </div>
           )}

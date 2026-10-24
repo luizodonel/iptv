@@ -3,9 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { initSecurityProtection } from './services/securityService'
+import { initGoogleCast } from './services/castService'
 
-// Inicializa a proteção de código e bloqueio de DevTools/F12 desde o primeiro ciclo
+// Inicializa a proteção de código e inicializa o Google Cast SDK para transmissão na TV
 initSecurityProtection();
+initGoogleCast();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
