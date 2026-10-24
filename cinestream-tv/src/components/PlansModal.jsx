@@ -10,7 +10,8 @@ import {
   Flame, 
   Clock, 
   Layers,
-  ChevronRight
+  ChevronRight,
+  Headset
 } from 'lucide-react';
 import { createPixPayment } from '../services/authService';
 
@@ -19,7 +20,8 @@ export default function PlansModal({
   onClose, 
   currentUser, 
   onRequireAuth, 
-  onPixGenerated 
+  onPixGenerated,
+  onOpenSupport
 }) {
   const [selectedCycle, setSelectedCycle] = useState('mensal'); // 'mensal' | 'anual'
   const [loadingPlan, setLoadingPlan] = useState(null);
@@ -277,6 +279,20 @@ export default function PlansModal({
             <Zap size={16} className="text-warning" />
             <span>Liberação 100% automática e instantânea pelo Mercado Pago logo após o pagamento do Pix.</span>
           </div>
+
+          {onOpenSupport && (
+            <button 
+              type="button" 
+              className="plans-support-link"
+              onClick={() => {
+                onClose();
+                onOpenSupport();
+              }}
+            >
+              <Headset size={15} />
+              <span>Dúvidas sobre os planos? Fale com o suporte no WhatsApp (61) 98226-1155</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

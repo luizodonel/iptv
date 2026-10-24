@@ -15,6 +15,8 @@ import PlansModal from './components/PlansModal';
 import PixModal from './components/PixModal';
 import SessionTerminatedModal from './components/SessionTerminatedModal';
 import SecurityShield from './components/SecurityShield';
+import SupportModal from './components/SupportModal';
+import SupportFloatingButton from './components/SupportFloatingButton';
 
 import { getAuthUser, logoutUser, checkHeartbeat } from './services/authService';
 import { updateSecurityUser } from './services/securityService';
@@ -64,6 +66,7 @@ export default function App() {
   const [pixModalData, setPixModalData] = useState(null);
   const [sessionKickedOpen, setSessionKickedOpen] = useState(false);
   const [sessionKickedReason, setSessionKickedReason] = useState('');
+  const [supportModalOpen, setSupportModalOpen] = useState(false);
 
   // Channels state
   const [channels, setChannels] = useState([]);
@@ -390,6 +393,7 @@ export default function App() {
           setAuthModalOpen(true);
         }}
         onOpenPlans={() => setPlansModalOpen(true)}
+        onOpenSupport={() => setSupportModalOpen(true)}
         onLogout={logoutUser}
       />
 
@@ -858,6 +862,7 @@ export default function App() {
           setAuthModalOpen(true);
         }}
         onPixGenerated={(data) => setPixModalData(data)}
+        onOpenSupport={() => setSupportModalOpen(true)}
       />
 
       {/* Pix Payment Modal (QR Code & Copia e Cola com polling do Mercado Pago) */}
@@ -868,6 +873,7 @@ export default function App() {
         onSuccess={(updatedUser) => {
           setCurrentUser(updatedUser);
         }}
+        onOpenSupport={() => setSupportModalOpen(true)}
       />
 
       {/* Session Terminated Modal (Aviso de limite de telas / outro dispositivo logado) */}
@@ -882,6 +888,20 @@ export default function App() {
           setSessionKickedOpen(false);
           setPlansModalOpen(true);
         }}
+      />
+
+      {/* Floating WhatsApp Support Icon */}
+      <SupportFloatingButton 
+        onOpenSupportModal={() => setSupportModalOpen(true)}
+        currentUser={currentUser}
+        hidden={!!activeStreamItem}
+      />
+
+      {/* Central de Suporte WhatsApp Modal */}
+      <SupportModal 
+        isOpen={supportModalOpen}
+        onClose={() => setSupportModalOpen(false)}
+        currentUser={currentUser}
       />
 
       {/* Escudo de Segurança contra Inspeção e DevTools (liberado apenas para master odonel) */}

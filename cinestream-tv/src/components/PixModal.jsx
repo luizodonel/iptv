@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { checkPixStatus } from '../services/authService';
 
-export default function PixModal({ pixData, isOpen, onClose, onSuccess }) {
+export default function PixModal({ pixData, isOpen, onClose, onSuccess, onOpenSupport }) {
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutos em segundos
   const [isApproved, setIsApproved] = useState(false);
@@ -209,6 +209,21 @@ export default function PixModal({ pixData, isOpen, onClose, onSuccess }) {
               <ShieldCheck size={16} className="text-emerald" />
               <span>Processado com segurança pelo <strong>Mercado Pago</strong></span>
             </div>
+
+            {onOpenSupport && (
+              <div className="pix-support-help">
+                <button 
+                  type="button" 
+                  className="btn-link-support"
+                  onClick={() => {
+                    onClose();
+                    onOpenSupport();
+                  }}
+                >
+                  Dúvidas com o Pix? Fale com o suporte no WhatsApp (61) 98226-1155
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

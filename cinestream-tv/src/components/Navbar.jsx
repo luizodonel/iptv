@@ -11,7 +11,8 @@ import {
   ChevronDown,
   ShieldCheck,
   Layers,
-  Sparkles
+  Sparkles,
+  Headset
 } from 'lucide-react';
 
 export default function Navbar({
@@ -22,6 +23,7 @@ export default function Navbar({
   currentUser = null,
   onOpenAuth,
   onOpenPlans,
+  onOpenSupport,
   onLogout
 }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -98,6 +100,17 @@ export default function Navbar({
               <span>Planos</span>
             </button>
 
+            {/* Suporte WhatsApp Button */}
+            <button
+              className="nav-support-btn"
+              onClick={onOpenSupport}
+              title="Central de Suporte WhatsApp: (61) 98226-1155"
+            >
+              <Headset size={16} />
+              <span>Suporte</span>
+              <span className="nav-support-dot" />
+            </button>
+
             {/* User Account / Auth Button */}
             {currentUser ? (
               <div className="user-menu-wrapper" ref={menuRef}>
@@ -170,6 +183,17 @@ export default function Navbar({
                     >
                       <Sparkles size={16} className="text-warning" />
                       <span>{currentUser.assinaturaAtiva ? 'Gerenciar Planos' : 'Assinar Agora'}</span>
+                    </button>
+
+                    <button
+                      className="dropdown-item"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        if (onOpenSupport) onOpenSupport();
+                      }}
+                    >
+                      <Headset size={16} style={{ color: '#25D366' }} />
+                      <span>Suporte WhatsApp</span>
                     </button>
 
                     <button
