@@ -3,7 +3,7 @@ import { X, Lock, User, Eye, EyeOff, Sparkles, AlertCircle, Phone, CheckCircle2 
 import { loginUser, registerUser } from '../services/authService';
 
 export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode = 'login' }) {
-  const [mode, setMode] = useState(initialMode); // 'login' | 'register'
+  const [mode, setMode] = useState('login'); // Sempre inicia com 'login' (Entrar)
   const [username, setUsername] = useState('');
   const [telefone, setTelefone] = useState('');
   const [senha, setSenha] = useState('');
@@ -26,10 +26,10 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
     }
   }, [isOpen]);
 
-  // Sincroniza o modo e reseta campos sempre que a modal for aberta
+  // Sempre que a modal for aberta, FORÇA a seleção da opção 'Entrar' (login)
   useEffect(() => {
     if (isOpen) {
-      setMode(initialMode || 'login');
+      setMode('login'); // Garante que 'Entrar' esteja sempre selecionado ao entrar na tela
       setErrorMsg('');
       setSenha('');
       setConfirmarSenha('');
@@ -38,7 +38,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
         document.body.style.overflow = '';
       };
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

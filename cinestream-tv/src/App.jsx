@@ -876,7 +876,7 @@ export default function App() {
         onClose={() => setPlansModalOpen(false)}
         currentUser={currentUser}
         onRequireAuth={() => {
-          setAuthModalMode('register');
+          setAuthModalMode('login');
           setAuthModalOpen(true);
         }}
         onPixGenerated={(data) => setPixModalData(data)}
