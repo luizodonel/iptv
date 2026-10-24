@@ -14,7 +14,6 @@ import AuthModal from './components/AuthModal';
 import PlansModal from './components/PlansModal';
 import PixModal from './components/PixModal';
 import SessionTerminatedModal from './components/SessionTerminatedModal';
-import SecurityShield from './components/SecurityShield';
 import SupportModal from './components/SupportModal';
 import SupportFloatingButton from './components/SupportFloatingButton';
 import MasterPanelModal from './components/MasterPanelModal';
@@ -100,9 +99,6 @@ export default function App() {
   const [seriesSearchResults, setSeriesSearchResults] = useState([]);
   const [isSearchingSeries, setIsSearchingSeries] = useState(false);
 
-  // DevTools detection state
-  const [isDevToolsBlocked, setIsDevToolsBlocked] = useState(false);
-
 
   // Trending & Home state
   const [trendingItems, setTrendingItems] = useState([]);
@@ -166,20 +162,6 @@ export default function App() {
         body: JSON.stringify({ path: window.location.pathname })
       }).catch(() => {});
     } catch (_) {}
-  }, []);
-
-  // Monitora detecção de DevTools / F12 para exibir escudo de proteção
-  useEffect(() => {
-    const handleDevToolsAlert = (e) => {
-      const blocked = Boolean(e.detail?.isOpen && !e.detail?.isMaster);
-      setIsDevToolsBlocked(blocked);
-      if (blocked) {
-        setActiveStreamItem(null);
-        setSelectedLiveChannel(null);
-      }
-    };
-    window.addEventListener('cinestream_devtools_alert', handleDevToolsAlert);
-    return () => window.removeEventListener('cinestream_devtools_alert', handleDevToolsAlert);
   }, []);
 
 
@@ -928,9 +910,6 @@ export default function App() {
         onClose={() => setMasterPanelOpen(false)}
         currentUser={currentUser}
       />
-
-      {/* Escudo de Segurança contra Inspeção e DevTools (liberado apenas para master odonel) */}
-      <SecurityShield isOpen={isDevToolsBlocked} />
     </div>
   );
 }

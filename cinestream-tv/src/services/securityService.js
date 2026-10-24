@@ -78,12 +78,7 @@ function applyConsoleSecurity(isMaster) {
  * Notifica a aplicação sobre mudança no estado das ferramentas de desenvolvedor
  */
 function setDevToolsState(isOpen) {
-  if (devToolsOpen !== isOpen) {
-    devToolsOpen = isOpen;
-    window.dispatchEvent(new CustomEvent('cinestream_devtools_alert', {
-      detail: { isOpen, isMaster: isMasterUser() }
-    }));
-  }
+  devToolsOpen = false;
 }
 
 /**
@@ -181,37 +176,13 @@ function handleContextMenu(e) {
 }
 
 /**
- * Monitor ativo de detecção de DevTools
+ * Desativa monitoramento invasivo para evitar falso-positivo em usuários comuns
  */
 function startDevToolsMonitor() {
-  if (devToolsInterval) clearInterval(devToolsInterval);
-
-  devToolsInterval = setInterval(() => {
-    if (isMasterUser()) {
-      if (devToolsOpen) setDevToolsState(false);
-      return;
-    }
-
-    // 1. Verificação por discrepância de tamanho de tela (quando DevTools está acoplado)
-    const threshold = 160;
-    const widthDiff = window.outerWidth - window.innerWidth > threshold;
-    const heightDiff = window.outerHeight - window.innerHeight > threshold;
-
-    let isDevOpen = widthDiff || heightDiff;
-
-    // 2. Verificação de performance através de breakpoint evaluation
-    if (!isDevOpen) {
-      const startTime = performance.now();
-      // eslint-disable-next-line no-debugger
-      debugger;
-      const duration = performance.now() - startTime;
-      if (duration > 100) {
-        isDevOpen = true;
-      }
-    }
-
-    setDevToolsState(isDevOpen);
-  }, 600);
+  if (devToolsInterval) {
+    clearInterval(devToolsInterval);
+    devToolsInterval = null;
+  }
 }
 
 /**
