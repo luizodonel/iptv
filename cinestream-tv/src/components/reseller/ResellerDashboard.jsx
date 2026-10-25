@@ -74,7 +74,8 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
   const extractSlug = (url) => {
     if (!url) return '';
     return String(url)
-      .replace(/^https?:\/\/[^\/]+\/?/i, '')
+      .replace(/^https?:\/\//i, '')
+      .replace(/\.logistadigital\.com\.br.*$/i, '')
       .replace(/[^a-zA-Z0-9]/g, '')
       .toLowerCase();
   };
@@ -199,13 +200,13 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
     setProfileSuccessMsg(null);
     try {
       const cleanSlug = (customSlugInput || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      const fullLink = cleanSlug ? `https://topcanais.logistadigital.com.br/${cleanSlug}` : '';
+      const fullLink = cleanSlug ? `https://${cleanSlug}.logistadigital.com.br` : '';
       const res = await updateResellerProfile({
         linkExclusivo: fullLink,
         linkSlug: cleanSlug,
         nomeLoja: nomeLojaInput
       });
-      setProfileSuccessMsg('Link exclusivo e dados da loja atualizados com sucesso!');
+      setProfileSuccessMsg('Subdomínio exclusivo e dados da loja atualizados com sucesso!');
       if (res.reseller) {
         setReseller(prev => ({
           ...prev,
@@ -373,11 +374,11 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
               <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>
                 {reseller?.linkExclusivo ? (
                   <span>
-                    Endereço enviado aos clientes: <strong style={{ color: '#60a5fa' }}>{reseller.linkExclusivo}</strong>
+                    Subdomínio enviado aos clientes: <strong style={{ color: '#60a5fa' }}>{reseller.linkExclusivo}</strong>
                     {reseller.nomeLoja && <span style={{ color: '#cbd5e1' }}> ({reseller.nomeLoja})</span>}
                   </span>
                 ) : (
-                  <span>Cadastre o nome do seu link (ex: <em>logistateste</em>) para que seus clientes recebam o link exclusivo <strong>https://topcanais.logistadigital.com.br/logistateste</strong></span>
+                  <span>Cadastre o nome do seu subdomínio (ex: <em>luizteste</em>) para ativar seu link exclusivo <strong>https://luizteste.logistadigital.com.br</strong></span>
                 )}
               </div>
             </div>
@@ -981,7 +982,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
             <form onSubmit={handleSaveProfile}>
               <div className="reseller-form-group">
                 <label className="reseller-label">
-                  <span>Link / Domínio Exclusivo do Lojista</span>
+                  <span>Subdomínio Exclusivo do Lojista</span>
                 </label>
                 <div style={{
                   display: 'flex',
@@ -993,22 +994,22 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                   marginTop: '0.35rem',
                   boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4)'
                 }}>
-                  {/* Prefixo Bloqueado */}
+                  {/* Prefixo: https:// */}
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '0 12px',
+                    padding: '0 10px',
                     background: 'rgba(245, 158, 11, 0.12)',
                     borderRight: '1px solid rgba(245, 158, 11, 0.25)',
                     color: '#f59e0b',
-                    fontSize: '0.82rem',
+                    fontSize: '0.85rem',
                     fontWeight: 700,
                     userSelect: 'none',
                     whiteSpace: 'nowrap'
                   }}>
                     <Globe size={15} />
-                    <span>https://topcanais.logistadigital.com.br/</span>
+                    <span>https://</span>
                   </div>
 
                   {/* Input onde digita APENAS o slug */}
@@ -1020,13 +1021,14 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                       background: 'transparent',
                       border: 'none',
                       outline: 'none',
-                      padding: '12px 14px',
+                      padding: '12px 10px',
                       color: '#f8fafc',
                       fontSize: '0.95rem',
                       fontFamily: 'monospace',
-                      fontWeight: 700
+                      fontWeight: 700,
+                      textAlign: 'center'
                     }}
-                    placeholder="logistateste"
+                    placeholder="luizteste"
                     value={customSlugInput}
                     onChange={(e) => {
                       // Remove pontos, traços, espaços e caracteres especiais (apenas letras e números minúsculos)
@@ -1036,9 +1038,25 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                     maxLength={32}
                     autoFocus
                   />
+
+                  {/* Sufixo: .logistadigital.com.br */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 12px',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    borderLeft: '1px solid rgba(245, 158, 11, 0.25)',
+                    color: '#f59e0b',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    userSelect: 'none',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    <span>.logistadigital.com.br</span>
+                  </div>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.4rem', display: 'block', lineHeight: '1.4' }}>
-                  🔒 O domínio <strong>https://topcanais.logistadigital.com.br/</strong> é fixo e bloqueado. Digite somente o nome do seu link (sem pontos, traços ou caracteres especiais).
+                  🔒 O domínio <strong>.logistadigital.com.br</strong> é fixo. Digite apenas o nome do seu subdomínio (sem pontos, traços ou caracteres especiais).
                 </span>
               </div>
 
@@ -1079,7 +1097,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                 <div>👤 *Usuário:* cliente_exemplo</div>
                 <div>🔑 *Senha:* ••••••••</div>
                 <div style={{ color: '#60a5fa', fontWeight: '700', marginTop: '4px', wordBreak: 'break-all' }}>
-                  🌐 *Acesse agora:* {customSlugInput ? `https://topcanais.logistadigital.com.br/${customSlugInput}` : 'https://topcanais.logistadigital.com.br'}
+                  🌐 *Acesse agora:* {customSlugInput ? `https://${customSlugInput}.logistadigital.com.br` : 'https://topcanais.logistadigital.com.br'}
                 </div>
               </div>
 

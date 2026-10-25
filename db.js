@@ -1666,11 +1666,12 @@ class Database {
     if (updates.linkExclusivo !== undefined || updates.linkSlug !== undefined) {
       const raw = String(updates.linkSlug || updates.linkExclusivo || '').trim();
       const cleanSlug = raw
-        .replace(/^https?:\/\/[^\/]+\/?/i, '')
+        .replace(/^https?:\/\//i, '')
+        .replace(/\.logistadigital\.com\.br.*$/i, '')
         .replace(/[^a-zA-Z0-9]/g, '')
         .toLowerCase();
       reseller.linkSlug = cleanSlug;
-      reseller.linkExclusivo = cleanSlug ? `https://topcanais.logistadigital.com.br/${cleanSlug}` : '';
+      reseller.linkExclusivo = cleanSlug ? `https://${cleanSlug}.logistadigital.com.br` : '';
     }
 
     if (updates.nomeLoja !== undefined) {
