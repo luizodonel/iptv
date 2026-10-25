@@ -240,7 +240,7 @@ export default function SupportModal({
                   key={topic.id}
                   type="button"
                   className="support-topic-card glass-panel"
-                  onClick={() => openWhatsApp(topic.message, currentUser)}
+                  onClick={() => openWhatsApp(topic.message, currentUser, brandName, activePhoneRaw)}
                 >
                   <div className="topic-icon-wrap">
                     <Icon size={20} />

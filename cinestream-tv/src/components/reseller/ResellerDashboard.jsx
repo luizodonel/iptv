@@ -83,6 +83,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [customSlugInput, setCustomSlugInput] = useState(() => extractSlug(currentUser?.linkExclusivo));
   const [nomeLojaInput, setNomeLojaInput] = useState(currentUser?.nomeLoja || '');
+  const [telefoneInput, setTelefoneInput] = useState(currentUser?.telefone || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
@@ -107,6 +108,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
           setCustomSlugInput(extractSlug(meRes.reseller.linkExclusivo));
         }
         if (meRes.reseller.nomeLoja) setNomeLojaInput(meRes.reseller.nomeLoja);
+        if (meRes.reseller.telefone) setTelefoneInput(meRes.reseller.telefone);
       }
       setClients(clientsRes);
       setTransactions(txRes);
@@ -204,15 +206,17 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
       const res = await updateResellerProfile({
         linkExclusivo: fullLink,
         linkSlug: cleanSlug,
-        nomeLoja: nomeLojaInput
+        nomeLoja: nomeLojaInput,
+        telefone: telefoneInput
       });
-      setProfileSuccessMsg('Subdomínio exclusivo e dados da loja atualizados com sucesso!');
+      setProfileSuccessMsg('Subdomínio exclusivo, marca e WhatsApp de suporte salvos com sucesso!');
       if (res.reseller) {
         setReseller(prev => ({
           ...prev,
           linkExclusivo: res.reseller.linkExclusivo,
           linkSlug: res.reseller.linkSlug,
-          nomeLoja: res.reseller.nomeLoja
+          nomeLoja: res.reseller.nomeLoja,
+          telefone: res.reseller.telefone
         }));
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('cinestream_branding_updated', {
@@ -222,7 +226,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
               brandBadge: 'TV',
               resellerId: res.reseller.id,
               resellerSlug: res.reseller.linkSlug || '',
-              contactPhone: res.reseller.telefone || ''
+              contactPhone: res.reseller.telefone || telefoneInput || ''
             }
           }));
         }
@@ -432,7 +436,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
           <div className="reseller-credit-card highlight">
             <div className="reseller-credit-header">
               <span className="reseller-credit-plan">📅 Créditos Mensais</span>
-              <span className="reseller-credit-badge">30 Dias</span>
+              <span className="reseller-credit-badge">30 Dias • Mín. 5 un</span>
             </div>
             <div className="reseller-credit-value">
               {Number(credits.mensal) || 0}
@@ -456,7 +460,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
           <div className="reseller-credit-card">
             <div className="reseller-credit-header">
               <span className="reseller-credit-plan">🗓️ Créditos Trimestrais</span>
-              <span className="reseller-credit-badge">90 Dias</span>
+              <span className="reseller-credit-badge">90 Dias • Mín. 5 un</span>
             </div>
             <div className="reseller-credit-value">
               {Number(credits.trimestral) || 0}
@@ -1096,6 +1100,26 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>
                   Aparecerá no cabeçalho das mensagens automáticas de acesso no WhatsApp.
+                </span>
+              </div>
+
+              <div className="reseller-form-group" style={{ marginTop: '1rem' }}>
+                <label className="reseller-label">
+                  <span>WhatsApp de Suporte aos Clientes da Loja</span>
+                </label>
+                <div className="reseller-input-wrapper">
+                  <Smartphone size={18} className="reseller-input-icon" />
+                  <input
+                    type="text"
+                    className="reseller-input"
+                    placeholder="Ex: (61) 98226-1155"
+                    value={telefoneInput}
+                    onChange={(e) => setTelefoneInput(formatPhone(e.target.value))}
+                    maxLength={16}
+                  />
+                </div>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>
+                  📞 É para este WhatsApp que seus clientes serão direcionados ao clicar no ícone de suporte da sua loja.
                 </span>
               </div>
 

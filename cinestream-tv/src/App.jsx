@@ -88,6 +88,11 @@ export default function App() {
   const effectiveBrandName = branding.isCustomBrand 
     ? branding.brandName 
     : (currentUser?.resellerNomeLoja || branding.brandName || 'Top Canais');
+
+  const effectivePhone = 
+    branding.contactPhone || 
+    currentUser?.resellerTelefone || 
+    (currentUser?.role === 'reseller' ? currentUser?.telefone : null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState('login');
   const [plansModalOpen, setPlansModalOpen] = useState(false);
@@ -970,6 +975,8 @@ export default function App() {
       <SupportFloatingButton 
         onOpenSupportModal={() => setSupportModalOpen(true)}
         currentUser={currentUser}
+        brandName={effectiveBrandName}
+        customPhone={effectivePhone}
         hidden={!!activeStreamItem}
       />
 
@@ -979,8 +986,8 @@ export default function App() {
         onClose={() => setSupportModalOpen(false)}
         currentUser={currentUser}
         brandName={effectiveBrandName}
-        isCustomBrand={branding.isCustomBrand}
-        customPhone={branding.contactPhone}
+        isCustomBrand={branding.isCustomBrand || !!currentUser?.resellerId}
+        customPhone={effectivePhone}
       />
 
       {/* Painel Administrativo Exclusivo Master Odonel */}

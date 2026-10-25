@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WhatsAppIcon } from './SupportModal';
-import { SUPPORT_PHONE_DISPLAY } from '../services/supportService';
+import { SUPPORT_PHONE_DISPLAY, openWhatsApp } from '../services/supportService';
 import { X, Trash2 } from 'lucide-react';
 
 const POS_STORAGE_KEY = 'cinestream_support_btn_pos';
@@ -9,6 +9,8 @@ const DISMISSED_KEY = 'cinestream_support_btn_dismissed';
 export default function SupportFloatingButton({ 
   onOpenSupportModal, 
   currentUser = null,
+  brandName = 'Top Canais',
+  customPhone = null,
   hidden = false 
 }) {
   const [isDismissed, setIsDismissed] = useState(() => {
@@ -145,8 +147,13 @@ export default function SupportFloatingButton({
         } catch (_) {}
       }
     } else {
-      // Foi apenas um clique rápido -> Abre o suporte
-      if (onOpenSupportModal) onOpenSupportModal();
+      // Foi apenas um clique rápido -> Abre diretamente o WhatsApp do lojista
+      openWhatsApp(
+        `Olá! Gostaria de falar com o atendimento da loja ${brandName || 'Top Canais'}.`,
+        currentUser,
+        brandName,
+        customPhone
+      );
     }
 
     setIsDragging(false);
@@ -159,6 +166,7 @@ export default function SupportFloatingButton({
 
   const currentX = position ? position.x : (typeof window !== 'undefined' ? window.innerWidth - 76 : 300);
   const currentY = position ? position.y : (typeof window !== 'undefined' ? window.innerHeight - 150 : 500);
+  const displayPhone = customPhone || SUPPORT_PHONE_DISPLAY;
 
   return (
     <>
@@ -190,7 +198,7 @@ export default function SupportFloatingButton({
         <div
           id="btn-cinestream-support"
           className={`support-floating-trigger ${isOverTrash ? 'over-trash' : ''}`}
-          title={`Central de Suporte WhatsApp: ${SUPPORT_PHONE_DISPLAY} (Segure e arraste para mover ou remover)`}
+          title={`Central de Atendimento WhatsApp: ${displayPhone} (Clique para conversar ou arraste para reposicionar)`}
           role="button"
           tabIndex={0}
         >

@@ -40,8 +40,10 @@ export default function BuyCreditsModal({
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedPlan(initialPlan || 'mensal');
-      setQuantidade(5);
+      const plan = initialPlan || 'mensal';
+      setSelectedPlan(plan);
+      const minRequired = (plan === 'mensal' || plan === 'trimestral') ? 5 : 1;
+      setQuantidade(minRequired);
       setErrorMsg('');
       setPixData(null);
       setCopiedPix(false);
@@ -69,6 +71,7 @@ export default function BuyCreditsModal({
   if (!isOpen) return null;
 
   const currentPlan = RESELLER_PLANS[selectedPlan] || RESELLER_PLANS.mensal;
+  const minQtd = currentPlan.compraMinima || ((selectedPlan === 'mensal' || selectedPlan === 'trimestral') ? 5 : 1);
   const valorUnitario = getResellerUnitPrice(selectedPlan, quantidade);
   const valorTotal = Number((quantidade * valorUnitario).toFixed(2));
   const valorSemDesconto = Number((quantidade * currentPlan.preco).toFixed(2));
@@ -78,8 +81,8 @@ export default function BuyCreditsModal({
     e.preventDefault();
     setErrorMsg('');
 
-    if (quantidade < 1) {
-      setErrorMsg('Informe uma quantidade de créditos de no mínimo 1.');
+    if (quantidade < minQtd) {
+      setErrorMsg(`A compra mínima para o ${currentPlan.nome} é de ${minQtd} créditos.`);
       return;
     }
 
@@ -151,8 +154,29 @@ export default function BuyCreditsModal({
                     <div
                       key={key}
                       className={`reseller-plan-option ${selectedPlan === key ? 'selected' : ''}`}
-                      onClick={() => setSelectedPlan(key)}
+                      onClick={() => {
+                        setSelectedPlan(key);
+                        const minRequired = p.compraMinima || ((key === 'mensal' || key === 'trimestral') ? 5 : 1);
+                        setQuantidade(prev => Math.max(minRequired, prev));
+                      }}
+                      style={{ position: 'relative' }}
                     >
+                      {p.compraMinima > 1 && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '6px',
+                          right: '6px',
+                          background: 'rgba(245, 158, 11, 0.2)',
+                          color: '#f59e0b',
+                          border: '1px solid rgba(245, 158, 11, 0.4)',
+                          borderRadius: '4px',
+                          padding: '1px 5px',
+                          fontSize: '0.62rem',
+                          fontWeight: 700
+                        }}>
+                          Mín. {p.compraMinima} un
+                        </span>
+                      )}
                       <div className="reseller-plan-title">{p.nome}</div>
                       <div className="reseller-plan-price">
                         R$ {p.preco.toFixed(2).replace('.', ',')}
@@ -182,19 +206,19 @@ export default function BuyCreditsModal({
                     type="button"
                     className="reseller-action-btn"
                     style={{ padding: '0.75rem 1rem' }}
-                    onClick={() => setQuantidade(prev => Math.max(1, prev - 1))}
-                    disabled={quantidade <= 1}
+                    onClick={() => setQuantidade(prev => Math.max(minQtd, prev - 1))}
+                    disabled={quantidade <= minQtd}
                   >
                     <Minus size={18} />
                   </button>
 
                   <input
                     type="number"
-                    min="1"
+                    min={minQtd}
                     className="reseller-input"
                     style={{ textAlign: 'center', fontSize: '1.25rem', fontWeight: 800, paddingLeft: '1rem' }}
                     value={quantidade}
-                    onChange={(e) => setQuantidade(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    onChange={(e) => setQuantidade(Math.max(minQtd, parseInt(e.target.value, 10) || minQtd))}
                     required
                   />
 
@@ -239,7 +263,7 @@ export default function BuyCreditsModal({
                     transition: 'all 0.2s ease'
                   }}>
                     <div style={{ fontSize: '0.7rem', color: quantidade < 10 ? '#f59e0b' : '#94a3b8', fontWeight: 700 }}>
-                      {quantidade < 10 && '✓ '}Faixa 1 (1 a 9 un)
+                      {quantidade < 10 && '✓ '}Faixa 1 ({minQtd} a 9 un)
                     </div>
                     <div style={{ fontSize: '1rem', fontWeight: 900, color: '#f8fafc', marginTop: '0.2rem' }}>
                       R$ {currentPlan.preco.toFixed(2).replace('.', ',')}

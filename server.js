@@ -1037,6 +1037,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const minQtd = planInfo.compraMinima || ((pKey === 'mensal' || pKey === 'trimestral') ? 5 : 1);
+      if (qtd < minQtd) {
+        sendJson(res, 400, { error: `A compra mínima para o ${planInfo.nome} é de ${minQtd} créditos.` });
+        return;
+      }
+
       const valorUnitario = getResellerUnitPrice(pKey, qtd);
       const valorTotal = Number((qtd * valorUnitario).toFixed(2));
 

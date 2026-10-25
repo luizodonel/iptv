@@ -1,5 +1,5 @@
 // Client service for CineStream B2B / Revenda Module
-import { getAuthToken } from './authService';
+import { getAuthToken } from './authService.js';
 
 export const RESELLER_PLANS = {
   mensal: {
@@ -10,8 +10,9 @@ export const RESELLER_PLANS = {
     preco10: 10.00,
     preco50: 8.00,
     custoMes: 12.50,
+    compraMinima: 5,
     badge: '30 dias',
-    descricao: '1 crédito = 1 tela com vigência de 30 dias.'
+    descricao: '1 crédito = 1 tela com vigência de 30 dias (Mínimo 5 un).'
   },
   trimestral: {
     id: 'trimestral',
@@ -21,8 +22,9 @@ export const RESELLER_PLANS = {
     preco10: 24.00,
     preco50: 20.00,
     custoMes: 9.33,
+    compraMinima: 5,
     badge: '90 dias (3 meses)',
-    descricao: '1 crédito = 1 tela com vigência de 90 dias.'
+    descricao: '1 crédito = 1 tela com vigência de 90 dias (Mínimo 5 un).'
   },
   semestral: {
     id: 'semestral',
@@ -32,6 +34,7 @@ export const RESELLER_PLANS = {
     preco10: 42.00,
     preco50: 36.00,
     custoMes: 8.00,
+    compraMinima: 1,
     badge: '180 dias (6 meses)',
     descricao: '1 crédito = 1 tela com vigência de 180 dias.'
   },
@@ -43,6 +46,7 @@ export const RESELLER_PLANS = {
     preco10: 72.00,
     preco50: 60.00,
     custoMes: 6.67,
+    compraMinima: 1,
     badge: '365 dias (1 ano)',
     descricao: '1 crédito = 1 tela com vigência de 1 ano completo.'
   }

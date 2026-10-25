@@ -128,7 +128,8 @@ export const RESELLER_PLANS = {
     preco10: 10.00,
     preco50: 8.00,
     custoMes: 12.50,
-    descricao: '1 crédito = 1 tela por 30 dias (R$ 12,50 | R$ 10,00 de 10 a 49 | R$ 8,00 para 50+)'
+    compraMinima: 5,
+    descricao: '1 crédito = 1 tela por 30 dias (Mínimo 5 un | R$ 12,50 | R$ 10,00 de 10 a 49 | R$ 8,00 para 50+)'
   },
   trimestral: {
     id: 'trimestral',
@@ -138,7 +139,8 @@ export const RESELLER_PLANS = {
     preco10: 24.00,
     preco50: 20.00,
     custoMes: 9.33,
-    descricao: '1 crédito = 1 tela por 90 dias (R$ 28,00 | R$ 24,00 de 10 a 49 | R$ 20,00 para 50+)'
+    compraMinima: 5,
+    descricao: '1 crédito = 1 tela por 90 dias (Mínimo 5 un | R$ 28,00 | R$ 24,00 de 10 a 49 | R$ 20,00 para 50+)'
   },
   semestral: {
     id: 'semestral',
@@ -148,6 +150,7 @@ export const RESELLER_PLANS = {
     preco10: 42.00,
     preco50: 36.00,
     custoMes: 8.00,
+    compraMinima: 1,
     descricao: '1 crédito = 1 tela por 180 dias (R$ 48,00 | R$ 42,00 de 10 a 49 | R$ 36,00 para 50+)'
   },
   anual: {
@@ -158,6 +161,7 @@ export const RESELLER_PLANS = {
     preco10: 72.00,
     preco50: 60.00,
     custoMes: 6.67,
+    compraMinima: 1,
     descricao: '1 crédito = 1 tela por 365 dias (R$ 80,00 | R$ 72,00 de 10 a 49 | R$ 60,00 para 50+)'
   }
 };
@@ -294,12 +298,14 @@ export function sanitizeUser(user) {
     };
     safe.linkExclusivo = user.linkExclusivo || '';
     safe.nomeLoja = user.nomeLoja || '';
+    safe.telefone = user.telefone || null;
   } else {
     safe.isMaster = false;
     safe.isReseller = false;
     safe.role = user.role || 'user';
     safe.resellerId = user.resellerId || null;
     safe.resellerNomeLoja = user.resellerNomeLoja || null;
+    safe.resellerTelefone = user.resellerTelefone || null;
     safe.assinaturaAtiva = isUserSubscriptionActive(user);
 
     if (user.planoId === 'teste-2h') {

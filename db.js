@@ -247,14 +247,21 @@ class Database {
         }));
 
         const resellerNomeMap = new Map();
+        const resellerTelefoneMap = new Map();
         for (const u of this.data.users) {
-          if (u.role === 'reseller' && (u.nomeLoja || u.nome)) {
-            resellerNomeMap.set(u.id, u.nomeLoja || u.nome);
+          if (u.role === 'reseller') {
+            if (u.nomeLoja || u.nome) resellerNomeMap.set(u.id, u.nomeLoja || u.nome);
+            if (u.telefone) resellerTelefoneMap.set(u.id, u.telefone);
           }
         }
         for (const u of this.data.users) {
-          if (u.resellerId && resellerNomeMap.has(u.resellerId)) {
-            u.resellerNomeLoja = resellerNomeMap.get(u.resellerId);
+          if (u.resellerId) {
+            if (resellerNomeMap.has(u.resellerId)) {
+              u.resellerNomeLoja = resellerNomeMap.get(u.resellerId);
+            }
+            if (resellerTelefoneMap.has(u.resellerId)) {
+              u.resellerTelefone = resellerTelefoneMap.get(u.resellerId);
+            }
           }
         }
 
@@ -1407,6 +1414,7 @@ class Database {
       resellerId: reseller.id,
       resellerNome: reseller.nome || reseller.username,
       resellerNomeLoja: reseller.nomeLoja || reseller.nome || '',
+      resellerTelefone: reseller.telefone || '',
       createdAt: now.toISOString(),
       assinaturaAtiva: true,
       planoId: `revenda-${pKey}-${screenCount}telas`,
@@ -1704,6 +1712,11 @@ class Database {
 
     if (updates.telefone !== undefined) {
       reseller.telefone = String(updates.telefone).trim();
+      for (const u of (this.data.users || [])) {
+        if (u.resellerId === reseller.id) {
+          u.resellerTelefone = reseller.telefone;
+        }
+      }
     }
 
     this.saveLocal();
