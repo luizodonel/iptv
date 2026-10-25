@@ -439,7 +439,9 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
               <span className="reseller-credit-unit">telas</span>
             </div>
             <div className="reseller-credit-footer">
-              <span className="reseller-credit-price">R$ 12,50 / crédito</span>
+              <span className="reseller-credit-price">
+                R$ {(RESELLER_PLANS.mensal?.preco ?? 12.5).toFixed(2).replace('.', ',')} / crédito
+              </span>
               <button
                 className="reseller-action-btn"
                 style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
@@ -461,7 +463,9 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
               <span className="reseller-credit-unit">telas</span>
             </div>
             <div className="reseller-credit-footer">
-              <span className="reseller-credit-price">R$ 32,50 / crédito</span>
+              <span className="reseller-credit-price">
+                R$ {(RESELLER_PLANS.trimestral?.preco ?? 28).toFixed(2).replace('.', ',')} / crédito
+              </span>
               <button
                 className="reseller-action-btn"
                 style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
@@ -483,7 +487,9 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
               <span className="reseller-credit-unit">telas</span>
             </div>
             <div className="reseller-credit-footer">
-              <span className="reseller-credit-price">R$ 60,00 / crédito</span>
+              <span className="reseller-credit-price">
+                R$ {(RESELLER_PLANS.semestral?.preco ?? 48).toFixed(2).replace('.', ',')} / crédito
+              </span>
               <button
                 className="reseller-action-btn"
                 style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
@@ -505,7 +511,9 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
               <span className="reseller-credit-unit">telas</span>
             </div>
             <div className="reseller-credit-footer">
-              <span className="reseller-credit-price">R$ 110,00 / crédito</span>
+              <span className="reseller-credit-price">
+                R$ {(RESELLER_PLANS.anual?.preco ?? 80).toFixed(2).replace('.', ',')} / crédito
+              </span>
               <button
                 className="reseller-action-btn"
                 style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
