@@ -242,8 +242,21 @@ class Database {
           creditosSemestral: Number(r.creditos_semestral) || 0,
           creditosAnual: Number(r.creditos_anual) || 0,
           linkExclusivo: r.link_exclusivo || '',
+          linkSlug: r.link_exclusivo ? String(r.link_exclusivo).replace(/^https?:\/\//i, '').replace(/\.logistadigital\.com\.br.*$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : '',
           nomeLoja: r.nome_loja || ''
         }));
+
+        const resellerNomeMap = new Map();
+        for (const u of this.data.users) {
+          if (u.role === 'reseller' && (u.nomeLoja || u.nome)) {
+            resellerNomeMap.set(u.id, u.nomeLoja || u.nome);
+          }
+        }
+        for (const u of this.data.users) {
+          if (u.resellerId && resellerNomeMap.has(u.resellerId)) {
+            u.resellerNomeLoja = resellerNomeMap.get(u.resellerId);
+          }
+        }
 
         this.data.sessions = sRes.rows.map(r => ({
           id: r.id,
@@ -1392,6 +1405,8 @@ class Database {
       cpf: '',
       role: 'user',
       resellerId: reseller.id,
+      resellerNome: reseller.nome || reseller.username,
+      resellerNomeLoja: reseller.nomeLoja || reseller.nome || '',
       createdAt: now.toISOString(),
       assinaturaAtiva: true,
       planoId: `revenda-${pKey}-${screenCount}telas`,
@@ -1676,6 +1691,11 @@ class Database {
 
     if (updates.nomeLoja !== undefined) {
       reseller.nomeLoja = String(updates.nomeLoja || '').trim();
+      for (const u of (this.data.users || [])) {
+        if (u.resellerId === reseller.id) {
+          u.resellerNomeLoja = reseller.nomeLoja;
+        }
+      }
     }
 
     if (updates.nome !== undefined && updates.nome.trim()) {
@@ -1689,6 +1709,39 @@ class Database {
     this.saveLocal();
     this.pgInsertUser(reseller);
     return reseller;
+  }
+
+  findResellerByHost(host) {
+    if (!host) return null;
+    const cleanHost = String(host).toLowerCase().split(':')[0].trim();
+    
+    // Subdomínio de logistadigital.com.br (ex: luizteste.logistadigital.com.br)
+    const match = cleanHost.match(/^([a-z0-9_-]+)\.logistadigital\.com\.br$/i);
+    const slug = match ? match[1].toLowerCase() : null;
+
+    const RESERVED_SLUGS = ['topcanais', 'www', 'casaroyale', 'api', 'admin', 'painel', 'painhotv', 'localhost'];
+    if (slug && !RESERVED_SLUGS.includes(slug)) {
+      const found = (this.data.users || []).find(u =>
+        u.role === 'reseller' && (
+          (u.linkSlug && u.linkSlug.toLowerCase() === slug) ||
+          (u.linkExclusivo && u.linkExclusivo.toLowerCase().includes(`://${slug}.`)) ||
+          (u.linkExclusivo && u.linkExclusivo.toLowerCase().includes(`${slug}.logistadigital.com.br`)) ||
+          (u.nomeLoja && u.nomeLoja.toLowerCase().replace(/[^a-z0-9]/g, '') === slug) ||
+          (u.username && u.username.toLowerCase() === `rev_${slug}`) ||
+          (u.username && u.username.toLowerCase() === slug)
+        )
+      );
+      if (found) return found;
+    }
+
+    // Busca alternativa por linkExclusivo contendo o host
+    return (this.data.users || []).find(u =>
+      u.role === 'reseller' && u.linkExclusivo && (
+        u.linkExclusivo.toLowerCase().includes(`://${cleanHost}`) ||
+        u.linkExclusivo.toLowerCase().includes(`://${cleanHost}/`) ||
+        u.linkExclusivo.toLowerCase().includes(cleanHost)
+      )
+    ) || null;
   }
 
   getAllResellerClients(filterResellerId = null) {

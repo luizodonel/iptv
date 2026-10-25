@@ -214,6 +214,18 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
           linkSlug: res.reseller.linkSlug,
           nomeLoja: res.reseller.nomeLoja
         }));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('cinestream_branding_updated', {
+            detail: {
+              isCustomBrand: true,
+              brandName: res.reseller.nomeLoja || res.reseller.nome || 'Top Canais',
+              brandBadge: 'TV',
+              resellerId: res.reseller.id,
+              resellerSlug: res.reseller.linkSlug || '',
+              contactPhone: res.reseller.telefone || ''
+            }
+          }));
+        }
       }
       setTimeout(() => {
         setLinkModalOpen(false);

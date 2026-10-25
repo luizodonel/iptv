@@ -27,7 +27,9 @@ export default function Navbar({
   onOpenSupport,
   onOpenMasterPanel,
   onOpenReseller,
-  onLogout
+  onLogout,
+  brandName = 'Top Canais',
+  brandBadge = 'TV'
 }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -68,8 +70,8 @@ export default function Navbar({
             tabIndex={0}
           >
             <div className="brand-text">
-              <span className="brand-title">Top Canais</span>
-              <span className="brand-badge">TV</span>
+              <span className="brand-title">{brandName || 'Top Canais'}</span>
+              <span className="brand-badge">{brandBadge || 'TV'}</span>
             </div>
           </div>
 

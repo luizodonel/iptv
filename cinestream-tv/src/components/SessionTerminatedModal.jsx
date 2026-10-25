@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { MonitorX, AlertTriangle, ArrowRight, Sparkles, LogIn, Clock, CreditCard } from 'lucide-react';
 
-export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUpgradePlans }) {
+export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUpgradePlans, brandName = 'Top Canais' }) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -50,7 +50,7 @@ export default function SessionTerminatedModal({ isOpen, reason, onReLogin, onUp
             <span>
               {isTrialExpired ? (
                 <>
-                  Esperamos que tenha gostado do <strong>CineStream TV</strong>! Para continuar assistindo aos mais de 400 canais, filmes e séries, escolha um de nossos planos com <strong>liberação instantânea via Pix</strong>.
+                  Esperamos que tenha gostado do <strong>{brandName || 'Top Canais'}</strong>! Para continuar assistindo aos mais de 400 canais, filmes e séries, escolha um de nossos planos com <strong>liberação instantânea via Pix</strong>.
                 </>
               ) : (
                 <>

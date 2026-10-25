@@ -41,10 +41,20 @@ export function WhatsAppIcon({ size = 20, className = '' }) {
   );
 }
 
-export default function SupportModal({ isOpen, onClose, currentUser = null }) {
+export default function SupportModal({ 
+  isOpen, 
+  onClose, 
+  currentUser = null,
+  brandName = 'Top Canais',
+  isCustomBrand = false,
+  customPhone = null
+}) {
   const [customMsg, setCustomMsg] = useState('');
   const [copied, setCopied] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState(null);
+
+  const activePhoneDisplay = customPhone || SUPPORT_PHONE_DISPLAY;
+  const activePhoneRaw = customPhone ? customPhone.replace(/\D/g, '') : null;
 
   useEffect(() => {
     if (isOpen) {
@@ -58,14 +68,14 @@ export default function SupportModal({ isOpen, onClose, currentUser = null }) {
   if (!isOpen) return null;
 
   const handleCopyPhone = () => {
-    navigator.clipboard.writeText(SUPPORT_PHONE_DISPLAY);
+    navigator.clipboard.writeText(activePhoneDisplay);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   };
 
   const handleSendCustomMsg = (e) => {
     e.preventDefault();
-    openWhatsApp(customMsg, currentUser);
+    openWhatsApp(customMsg, currentUser, brandName, activePhoneRaw);
     setCustomMsg('');
   };
 
@@ -73,49 +83,49 @@ export default function SupportModal({ isOpen, onClose, currentUser = null }) {
     {
       id: 'planos',
       icon: CreditCard,
-      title: 'Planos e Pagamento Pix',
+      title: 'Planos e Assinatura',
       description: 'Dúvidas sobre ativação, renovação ou comprovante de pagamento',
-      message: 'Olá! Gostaria de tirar dúvidas sobre os planos ou pagamentos Pix do CineStream.'
+      message: `Olá! Gostaria de tirar dúvidas sobre os planos ou pagamentos na ${brandName || 'Top Canais'}.`
     },
     {
       id: 'suporte-tecnico',
       icon: Tv,
       title: 'Suporte Técnico & Canais',
       description: 'Ajuda com canais ao vivo, filmes, séries ou qualidade de áudio e vídeo',
-      message: 'Olá! Preciso de suporte técnico sobre a reprodução de canais/conteúdo no CineStream.'
+      message: `Olá! Preciso de suporte técnico sobre a reprodução de canais/conteúdo na ${brandName || 'Top Canais'}.`
     },
     {
       id: 'smart-tv',
       icon: TvMinimal,
       title: 'Como Assistir na Smart TV',
       description: 'Instruções para configurar na sua TV, TV Box, celular ou PC',
-      message: 'Olá! Gostaria de ajuda para configurar e assistir o CineStream na minha Smart TV/aparelho.'
+      message: `Olá! Gostaria de ajuda para configurar e assistir na minha Smart TV/aparelho.`
     },
     {
       id: 'telas',
       icon: Users,
       title: 'Telas Simultâneas & Conta',
       description: 'Gerenciamento de conexões simultâneas ou recuperação de login',
-      message: 'Olá! Preciso de ajuda com o limite de telas ou login no CineStream.'
+      message: `Olá! Preciso de ajuda com o limite de telas ou acesso na ${brandName || 'Top Canais'}.`
     }
   ];
 
   const faqs = [
     {
-      question: 'Como funciona a ativação do meu plano após pagar o Pix?',
-      answer: 'A liberação é 100% automática e imediata pelo Mercado Pago! Assim que você conclui o pagamento do código Pix no aplicativo do seu banco, seu plano e todas as telas são ativados no mesmo segundo sem necessidade de enviar comprovante.'
+      question: 'Como funciona a ativação do meu plano?',
+      answer: 'A liberação é automática e imediata! Seu plano e telas são ativados no mesmo instante para você aproveitar todos os canais, filmes e séries.'
     },
     {
       question: 'Quantas telas posso assistir simultaneamente?',
-      answer: 'No plano de 1 Tela, você pode assistir em 1 aparelho por vez. No plano de 2 Telas, até dois aparelhos diferentes podem assistir ao mesmo tempo. Se conectar em um novo aparelho além do limite, o sistema desconecta o anterior com segurança.'
+      answer: 'Depende do seu plano contratado. No plano de 1 Tela, você pode assistir em 1 aparelho por vez. No plano de 2 Telas ou mais, múltiplos aparelhos podem assistir ao mesmo tempo.'
     },
     {
       question: 'Consigo assistir na Smart TV, TV Box ou Celular?',
-      answer: 'Sim! O CineStream funciona direto no navegador web da sua Smart TV (Samsung Tizen, LG WebOS ou Android TV), TV Box, Fire TV Stick, Smartphone ou Computador sem necessidade de instalar aplicativos complicados.'
+      answer: `Sim! O portal ${brandName} funciona direto no navegador web da sua Smart TV (Samsung Tizen, LG WebOS ou Android TV), TV Box, Fire TV Stick, Smartphone ou Computador sem necessidade de instalar aplicativos complicados.`
     },
     {
       question: 'Qual é o número e horário de atendimento do suporte?',
-      answer: `Nosso atendimento oficial é via WhatsApp pelo número ${SUPPORT_PHONE_DISPLAY}. Estamos à disposição todos os dias, incluindo finais de semana e feriados.`
+      answer: `Nosso atendimento oficial é via WhatsApp pelo número ${activePhoneDisplay}. Estamos à disposição todos os dias para melhor lhe atender.`
     }
   ];
 
@@ -176,7 +186,7 @@ export default function SupportModal({ isOpen, onClose, currentUser = null }) {
                   <Clock size={12} /> {SUPPORT_HOURS}
                 </span>
               </div>
-              <h3 className="support-cta-number">{SUPPORT_PHONE_DISPLAY}</h3>
+              <h3 className="support-cta-number">{activePhoneDisplay}</h3>
               <p className="support-cta-desc">
                 Clique no botão abaixo para iniciar uma conversa diretamente no nosso WhatsApp.
               </p>
@@ -187,7 +197,7 @@ export default function SupportModal({ isOpen, onClose, currentUser = null }) {
             <button 
               type="button" 
               className="btn-whatsapp-primary pulse-hover"
-              onClick={() => openWhatsApp('Olá! Gostaria de falar com o suporte do CineStream.', currentUser)}
+              onClick={() => openWhatsApp(`Olá! Gostaria de falar com o atendimento da loja ${brandName || 'Top Canais'}.`, currentUser, brandName, activePhoneRaw)}
             >
               <WhatsAppIcon size={22} />
               <span>Falar no WhatsApp Agora</span>
@@ -309,7 +319,7 @@ export default function SupportModal({ isOpen, onClose, currentUser = null }) {
         <div className="support-modal-footer">
           <div className="footer-secure-guarantee">
             <ShieldCheck size={16} className="text-emerald" />
-            <span>CineStream TV • Suporte Dedicado ao Cliente • {SUPPORT_PHONE_DISPLAY}</span>
+            <span>{brandName || 'Top Canais'} • Atendimento Dedicado • {activePhoneDisplay}</span>
           </div>
         </div>
       </div>

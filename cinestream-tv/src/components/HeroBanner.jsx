@@ -1,7 +1,7 @@
 import React from 'react';
 import { Play, Info, Star, Calendar, Radio } from 'lucide-react';
 
-export default function HeroBanner({ featured, onPlay, onSelectMedia }) {
+export default function HeroBanner({ featured, onPlay, onSelectMedia, brandName = 'Top Canais' }) {
   if (!featured) return null;
 
   const isLive = featured.category !== undefined;
@@ -40,7 +40,7 @@ export default function HeroBanner({ featured, onPlay, onSelectMedia }) {
           <h1 className="hero-title">{featured.title || featured.name}</h1>
 
           <p className="hero-overview">
-            {featured.overview || 'Assista em alta resolução com transmissão ultrarrápida no Top Canais.'}
+            {featured.overview || `Assista em alta resolução com transmissão ultrarrápida no ${brandName || 'Top Canais'}.`}
           </p>
 
           <div className="hero-buttons-row">

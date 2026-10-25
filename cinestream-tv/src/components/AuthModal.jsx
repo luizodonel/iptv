@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { X, Lock, User, Eye, EyeOff, Sparkles, AlertCircle, Phone, CheckCircle2 } from 'lucide-react';
 import { loginUser, registerUser } from '../services/authService';
 
-export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode = 'login' }) {
+export default function AuthModal({ 
+  isOpen, 
+  onClose, 
+  onAuthSuccess, 
+  initialMode = 'login',
+  brandName = 'Top Canais',
+  isCustomBrand = false,
+  resellerPhone = null
+}) {
   const [mode, setMode] = useState('login'); // Sempre inicia com 'login' (Entrar)
   const [username, setUsername] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -156,32 +164,53 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
             <Sparkles size={24} className="text-primary pulse-glow" />
           </div>
           <h2 className="auth-title">
-            {mode === 'login' ? 'Bem-vindo de volta!' : 'Crie sua conta'}
+            {isCustomBrand 
+              ? `Portal ${brandName}` 
+              : (mode === 'login' ? 'Bem-vindo de volta!' : 'Crie sua conta')}
           </h2>
           <p className="auth-subtitle">
-            {mode === 'login' 
-              ? 'Acesse seus canais, filmes e séries favoritos'
-              : 'Cadastro rápido com usuário único e acesso imediato'}
+            {isCustomBrand 
+              ? `Acesse seus canais e filmes na loja ${brandName}` 
+              : (mode === 'login' 
+                  ? 'Acesse seus canais, filmes e séries favoritos'
+                  : 'Cadastro rápido com usuário único e acesso imediato')}
           </p>
         </div>
 
-        {/* Seletor de Modo (Entrar / Criar Conta) */}
-        <div className="auth-tabs">
-          <button 
-            type="button"
-            className={`auth-tab-btn ${mode === 'login' ? 'active' : ''}`}
-            onClick={() => switchMode('login')}
-          >
-            Entrar
-          </button>
-          <button 
-            type="button"
-            className={`auth-tab-btn ${mode === 'register' ? 'active' : ''}`}
-            onClick={() => switchMode('register')}
-          >
-            Criar Conta
-          </button>
-        </div>
+        {/* Seletor de Modo (Entrar / Criar Conta) - Apenas no portal geral */}
+        {!isCustomBrand ? (
+          <div className="auth-tabs">
+            <button 
+              type="button"
+              className={`auth-tab-btn ${mode === 'login' ? 'active' : ''}`}
+              onClick={() => switchMode('login')}
+            >
+              Entrar
+            </button>
+            <button 
+              type="button"
+              className={`auth-tab-btn ${mode === 'register' ? 'active' : ''}`}
+              onClick={() => switchMode('register')}
+            >
+              Criar Conta
+            </button>
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0.45rem 1rem',
+            background: 'rgba(255, 255, 255, 0.04)',
+            borderRadius: '8px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            marginBottom: '1rem',
+            fontSize: '0.85rem',
+            color: '#94a3b8'
+          }}>
+            🔒 Acesso Exclusivo para Clientes da Loja
+          </div>
+        )}
 
         {mode === 'register' && ipTrialInfo.checked && (
           ipTrialInfo.canTrial ? (
@@ -332,28 +361,64 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
         </form>
 
         <div className="auth-footer">
-          {mode === 'login' ? (
-            <p>
-              Ainda não tem conta?{' '}
-              <button 
-                type="button" 
-                className="link-btn" 
-                onClick={() => switchMode('register')}
-              >
-                Cadastre-se agora
-              </button>
-            </p>
+          {isCustomBrand ? (
+            resellerPhone ? (
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '0.6rem' }}>
+                  Ainda não possui login ou deseja renovar seu acesso?
+                </p>
+                <a
+                  href={`https://wa.me/55${resellerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá! Gostaria de ter acesso ao portal ${brandName}.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    padding: '0.65rem 1.25rem',
+                    background: '#22c55e',
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    textDecoration: 'none',
+                    width: '100%',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <Phone size={16} /> Falar com {brandName} no WhatsApp
+                </a>
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                Solicite seu login diretamente ao seu revendedor {brandName}.
+              </p>
+            )
           ) : (
-            <p>
-              Já possui uma conta?{' '}
-              <button 
-                type="button" 
-                className="link-btn" 
-                onClick={() => switchMode('login')}
-              >
-                Fazer login
-              </button>
-            </p>
+            mode === 'login' ? (
+              <p>
+                Ainda não tem conta?{' '}
+                <button 
+                  type="button" 
+                  className="link-btn" 
+                  onClick={() => switchMode('register')}
+                >
+                  Cadastre-se agora
+                </button>
+              </p>
+            ) : (
+              <p>
+                Já possui uma conta?{' '}
+                <button 
+                  type="button" 
+                  className="link-btn" 
+                  onClick={() => switchMode('login')}
+                >
+                  Fazer login
+                </button>
+              </p>
+            )
           )}
         </div>
       </div>

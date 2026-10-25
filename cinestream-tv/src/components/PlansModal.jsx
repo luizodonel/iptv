@@ -21,7 +21,8 @@ export default function PlansModal({
   currentUser, 
   onRequireAuth, 
   onPixGenerated,
-  onOpenSupport
+  onOpenSupport,
+  brandName = 'Top Canais'
 }) {
   const [selectedCycle, setSelectedCycle] = useState('mensal'); // 'mensal' | 'anual'
   const [loadingPlan, setLoadingPlan] = useState(null);
@@ -203,7 +204,7 @@ export default function PlansModal({
               <ShieldCheck size={20} className="text-emerald" />
             </div>
             <div className="sub-banner-info">
-              <span className="sub-title">Você já possui assinatura ativa: <strong>{currentUser.planoNome || 'Plano Top Canais'}</strong></span>
+              <span className="sub-title">Você já possui assinatura ativa: <strong>{currentUser.planoNome || `Plano ${brandName || 'Top Canais'}`}</strong></span>
               <span className="sub-exp">
                 Válida até {new Date(currentUser.fimAssinatura).toLocaleDateString('pt-BR')} ({currentUser.limiteTelas || 1} tela{currentUser.limiteTelas > 1 ? 's' : ''})
               </span>

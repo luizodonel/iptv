@@ -270,6 +270,7 @@ export function sanitizeUser(user) {
     safe.isReseller = false;
     safe.role = user.role || 'user';
     safe.resellerId = user.resellerId || null;
+    safe.resellerNomeLoja = user.resellerNomeLoja || null;
     safe.assinaturaAtiva = isUserSubscriptionActive(user);
 
     if (user.planoId === 'teste-2h') {

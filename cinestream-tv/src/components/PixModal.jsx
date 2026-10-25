@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { checkPixStatus } from '../services/authService';
 
-export default function PixModal({ pixData, isOpen, onClose, onSuccess, onOpenSupport }) {
+export default function PixModal({ pixData, isOpen, onClose, onSuccess, onOpenSupport, brandName = 'Top Canais' }) {
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutos em segundos
   const [isApproved, setIsApproved] = useState(false);
@@ -23,7 +23,7 @@ export default function PixModal({ pixData, isOpen, onClose, onSuccess, onOpenSu
   const qrCodeText = pixData?.qrCode;
   const paymentId = pixData?.paymentId;
   const valor = pixData?.valor ? Number(pixData.valor).toFixed(2).replace('.', ',') : '0,00';
-  const planoNome = pixData?.plano?.nome || 'Plano Top Canais';
+  const planoNome = pixData?.plano?.nome || `Plano ${brandName || 'Top Canais'}`;
 
   // Countdown timer
   useEffect(() => {

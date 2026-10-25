@@ -111,6 +111,27 @@ function getClientIp(req) {
   return normalizeIp(remote);
 }
 
+function getRequestHost(req, body = null, parsedUrl = null) {
+  if (body && body.originHost) {
+    return String(body.originHost).trim();
+  }
+  if (parsedUrl && parsedUrl.searchParams.get('originHost')) {
+    return String(parsedUrl.searchParams.get('originHost')).trim();
+  }
+  if (parsedUrl && parsedUrl.searchParams.get('host')) {
+    return String(parsedUrl.searchParams.get('host')).trim();
+  }
+  const xOrigin = req.headers['x-origin-host'];
+  if (xOrigin) {
+    return String(xOrigin).trim();
+  }
+  const forwardedHost = req.headers['x-forwarded-host'];
+  if (forwardedHost) {
+    return forwardedHost.split(',')[0].trim();
+  }
+  return (req.headers.host || '').split(':')[0].trim();
+}
+
 function parseDevice(ua = '') {
   let deviceType = 'Desktop';
   let deviceModel = 'Computador';
@@ -1352,10 +1373,51 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // --- Branding e Whitelabel Dinâmico por Subdomínio de Revendedor ---
+  if (pathname === '/api/public/branding' && req.method === 'GET') {
+    const host = getRequestHost(req, null, parsedUrl);
+    const reseller = db.findResellerByHost(host);
+
+    if (reseller) {
+      const brandName = reseller.nomeLoja || reseller.nome || 'Top Canais';
+      sendJson(res, 200, {
+        isCustomBrand: true,
+        brandName,
+        brandBadge: 'TV',
+        resellerId: reseller.id,
+        resellerSlug: reseller.linkSlug || '',
+        contactPhone: reseller.telefone || '',
+        supportPhoneDisplay: reseller.telefone || ''
+      });
+      return;
+    }
+
+    sendJson(res, 200, {
+      isCustomBrand: false,
+      brandName: 'Top Canais',
+      brandBadge: 'TV',
+      resellerId: null,
+      resellerSlug: null,
+      contactPhone: null,
+      supportPhoneDisplay: '(61) 98226-1155'
+    });
+    return;
+  }
+
   // --- Cadastro de Usuário (Com Regra de 1 Teste de 2h por IP) ---
   if (pathname === '/api/auth/register' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
+      const host = getRequestHost(req, body, parsedUrl);
+      const portalReseller = db.findResellerByHost(host);
+      if (portalReseller) {
+        const storeName = portalReseller.nomeLoja || portalReseller.nome || 'deste lojista';
+        sendJson(res, 403, { 
+          error: `Cadastros públicos estão desativados no portal ${storeName}. Solicite seu acesso via WhatsApp com seu revendedor.` 
+        });
+        return;
+      }
+
       const { username, telefone, senha, confirmarSenha, email, nome, cpf, deviceId, deviceInfo } = body;
 
       const cleanUsername = (username || '').trim();
@@ -1509,6 +1571,28 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Regra de Isolamento de Revendedor (Tenant Isolation por Subdomínio):
+      const host = getRequestHost(req, body, parsedUrl);
+      const portalReseller = db.findResellerByHost(host);
+
+      if (portalReseller) {
+        // Apenas podem entrar:
+        // 1. Master admin ('odonel' ou role === 'admin')
+        // 2. O próprio revendedor dono do portal (user.id === portalReseller.id)
+        // 3. Clientes cadastrados por este revendedor (user.resellerId === portalReseller.id)
+        const isMaster = (user.username || '').toLowerCase() === 'odonel' || user.role === 'admin';
+        const isOwnerReseller = user.id === portalReseller.id;
+        const isTenantClient = user.resellerId === portalReseller.id;
+
+        if (!isMaster && !isOwnerReseller && !isTenantClient) {
+          const storeName = portalReseller.nomeLoja || portalReseller.nome || 'deste lojista';
+          sendJson(res, 403, { 
+            error: `Acesso não permitido: este usuário não pertence à loja "${storeName}". Acesse pelo link exclusivo fornecido pelo seu revendedor.` 
+          });
+          return;
+        }
+      }
+
       // Validação de expiração de teste de 2 horas
       const isSubActive = isUserSubscriptionActive(user);
       const isTrialExpired = (user.planoId === 'teste-2h' && !isSubActive);
@@ -1563,6 +1647,24 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 401, { error: 'Não autenticado.' });
       return;
     }
+
+    const host = getRequestHost(req, null, parsedUrl);
+    const portalReseller = db.findResellerByHost(host);
+
+    if (portalReseller) {
+      const isMaster = (auth.user.username || '').toLowerCase() === 'odonel' || auth.user.role === 'admin';
+      const isOwnerReseller = auth.user.id === portalReseller.id;
+      const isTenantClient = auth.user.resellerId === portalReseller.id;
+
+      if (!isMaster && !isOwnerReseller && !isTenantClient) {
+        sendJson(res, 403, { 
+          error: 'Sessão pertence a outro revendedor.', 
+          tenantMismatch: true 
+        });
+        return;
+      }
+    }
+
     sendJson(res, 200, { user: sanitizeUser(auth.user) });
     return;
   }

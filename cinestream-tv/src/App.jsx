@@ -19,7 +19,8 @@ import SupportFloatingButton from './components/SupportFloatingButton';
 import MasterPanelModal from './components/MasterPanelModal';
 import ResellerPortal from './components/reseller/ResellerPortal';
 
-import { getAuthUser, logoutUser, checkHeartbeat } from './services/authService';
+import { getAuthUser, logoutUser, checkHeartbeat, verifyCurrentSession } from './services/authService';
+import { getBranding, fetchBranding } from './services/brandingService';
 import { updateSecurityUser } from './services/securityService';
 
 import { getChannels, getCategories } from './services/channelsService';
@@ -61,6 +62,32 @@ export default function App() {
 
   // Auth & Subscription State
   const [currentUser, setCurrentUser] = useState(() => getAuthUser());
+  const [branding, setBranding] = useState(() => getBranding());
+
+  useEffect(() => {
+    fetchBranding().then(b => {
+      if (b) setBranding(b);
+    });
+
+    const handleBrandingUpdate = (e) => {
+      if (e.detail) setBranding(e.detail);
+    };
+    window.addEventListener('cinestream_branding_updated', handleBrandingUpdate);
+    return () => window.removeEventListener('cinestream_branding_updated', handleBrandingUpdate);
+  }, []);
+
+  // Verificar se a sessão persistida bate com o tenant acessado
+  useEffect(() => {
+    verifyCurrentSession().then(result => {
+      if (result?.tenantMismatch) {
+        setCurrentUser(null);
+      }
+    });
+  }, []);
+
+  const effectiveBrandName = branding.isCustomBrand 
+    ? branding.brandName 
+    : (currentUser?.resellerNomeLoja || branding.brandName || 'Top Canais');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState('login');
   const [plansModalOpen, setPlansModalOpen] = useState(false);
@@ -435,6 +462,8 @@ export default function App() {
         onOpenMasterPanel={() => setMasterPanelOpen(true)}
         onOpenReseller={navigateToReseller}
         onLogout={logoutUser}
+        brandName={effectiveBrandName}
+        brandBadge={branding.brandBadge}
       />
 
       {/* Main Content Area */}
@@ -448,6 +477,7 @@ export default function App() {
               featured={featuredItem} 
               onPlay={handlePlayMedia}
               onSelectMedia={setSelectedDetailItem}
+              brandName={effectiveBrandName}
             />
 
             {/* Continue Watching Section */}
@@ -517,7 +547,7 @@ export default function App() {
                 <div className="section-title-wrap">
                   <TrendingUp className="section-icon text-accent" size={22} />
                   <div>
-                    <h2 className="section-heading">Em Alta no Top Canais</h2>
+                    <h2 className="section-heading">Em Alta no {effectiveBrandName}</h2>
                     <p className="section-subheading">Os filmes e séries mais populares da semana</p>
                   </div>
                 </div>
@@ -890,6 +920,9 @@ export default function App() {
             setPlansModalOpen(true);
           }
         }}
+        brandName={effectiveBrandName}
+        isCustomBrand={branding.isCustomBrand}
+        resellerPhone={branding.contactPhone}
       />
 
       {/* Plans Modal (Escolha de Planos de 1 e 2 telas) */}
@@ -903,6 +936,7 @@ export default function App() {
         }}
         onPixGenerated={(data) => setPixModalData(data)}
         onOpenSupport={() => setSupportModalOpen(true)}
+        brandName={effectiveBrandName}
       />
 
       {/* Pix Payment Modal (QR Code & Copia e Cola com polling do Mercado Pago) */}
@@ -914,6 +948,7 @@ export default function App() {
           setCurrentUser(updatedUser);
         }}
         onOpenSupport={() => setSupportModalOpen(true)}
+        brandName={effectiveBrandName}
       />
 
       {/* Session Terminated Modal (Aviso de limite de telas / outro dispositivo logado) */}
@@ -928,6 +963,7 @@ export default function App() {
           setSessionKickedOpen(false);
           setPlansModalOpen(true);
         }}
+        brandName={effectiveBrandName}
       />
 
       {/* Floating WhatsApp Support Icon */}
@@ -942,6 +978,9 @@ export default function App() {
         isOpen={supportModalOpen}
         onClose={() => setSupportModalOpen(false)}
         currentUser={currentUser}
+        brandName={effectiveBrandName}
+        isCustomBrand={branding.isCustomBrand}
+        customPhone={branding.contactPhone}
       />
 
       {/* Painel Administrativo Exclusivo Master Odonel */}

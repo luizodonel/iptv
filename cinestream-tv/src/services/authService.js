@@ -69,9 +69,43 @@ export async function fetchPlans() {
   return [];
 }
 
+export async function verifyCurrentSession() {
+  const token = getAuthToken();
+  if (!token) return null;
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  try {
+    const res = await fetch(`/api/auth/me?originHost=${encodeURIComponent(host)}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-Origin-Host': host
+      }
+    });
+    if (res.status === 403) {
+      const data = await res.json().catch(() => ({}));
+      if (data.tenantMismatch) {
+        clearAuthData();
+        return { tenantMismatch: true };
+      }
+    }
+    if (!res.ok) {
+      clearAuthData();
+      return null;
+    }
+    const data = await res.json();
+    if (data.user) {
+      setAuthData(token, data.user);
+      return data.user;
+    }
+  } catch (err) {
+    console.warn('Erro ao verificar sessão atual:', err);
+  }
+  return null;
+}
+
 export async function registerUser({ username, telefone, senha, confirmarSenha, email, nome, cpf }) {
   const deviceId = getDeviceId();
   const deviceInfo = getDeviceInfo();
+  const originHost = typeof window !== 'undefined' ? window.location.hostname : '';
 
   const res = await fetch('/api/auth/register', {
     method: 'POST',
@@ -85,7 +119,8 @@ export async function registerUser({ username, telefone, senha, confirmarSenha, 
       nome, 
       cpf, 
       deviceId, 
-      deviceInfo 
+      deviceInfo,
+      originHost
     })
   });
 
@@ -101,6 +136,7 @@ export async function registerUser({ username, telefone, senha, confirmarSenha, 
 export async function loginUser({ username, email, senha }) {
   const deviceId = getDeviceId();
   const deviceInfo = getDeviceInfo();
+  const originHost = typeof window !== 'undefined' ? window.location.hostname : '';
 
   const res = await fetch('/api/auth/login', {
     method: 'POST',
@@ -109,7 +145,8 @@ export async function loginUser({ username, email, senha }) {
       username: username || email, 
       senha, 
       deviceId, 
-      deviceInfo 
+      deviceInfo,
+      originHost
     })
   });
 
