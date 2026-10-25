@@ -1048,36 +1048,56 @@ class Database {
       return { valid: false, reason: session.terminatedReason || 'LOGGED_IN_ANOTHER_DEVICE' };
     }
 
-    // Validação automática de expiração de teste de 2 horas ou assinatura
+    // Validação de expiração de teste de 2 horas ou assinatura para clientes comuns
     const user = this.findUserById(session.userId);
     if (user) {
       const username = (user.username || '').toLowerCase().trim();
       const isMaster = username === 'odonel' || user.role === 'admin' || user.isMaster;
-      
-      if (!isMaster) {
-        const now = new Date();
-        const end = user.fimAssinatura ? new Date(user.fimAssinatura) : null;
-        const isExpired = !user.assinaturaAtiva || !end || now >= end;
+      const isReseller = user.role === 'reseller';
 
-        if (isExpired) {
+      // Usuário Master ou Revendedor B2B não possui expiração de assinatura de streaming
+      if (isMaster || isReseller) {
+        if (isReseller && user.status === 'bloqueado') {
           session.isActive = false;
-          session.terminatedReason = user.planoId === 'teste-2h' ? 'TRIAL_EXPIRED' : 'SUBSCRIPTION_EXPIRED';
-          session.terminatedAt = now.toISOString();
-          user.assinaturaAtiva = false;
-
+          session.terminatedReason = 'RESELLER_BLOCKED';
+          session.terminatedAt = new Date().toISOString();
           this.saveLocal();
           this.pgInsertSession(session);
-          this.pgInsertUser(user);
-
-          return { 
-            valid: false, 
-            reason: session.terminatedReason,
-            isTrialExpired: user.planoId === 'teste-2h',
-            message: user.planoId === 'teste-2h'
-              ? 'Seu período de teste gratuito de 2 horas encerrou. Para continuar assistindo, assine um de nossos planos!'
-              : 'Sua assinatura expirou. Renove seu plano para continuar assistindo.'
+          return {
+            valid: false,
+            reason: 'RESELLER_BLOCKED',
+            message: 'Sua conta de revendedor está bloqueada pela administração Master.'
           };
         }
+
+        session.lastHeartbeat = new Date().toISOString();
+        this.saveLocal();
+        this.pgInsertSession(session);
+        return { valid: true, user };
+      }
+
+      const now = new Date();
+      const end = user.fimAssinatura ? new Date(user.fimAssinatura) : null;
+      const isExpired = !user.assinaturaAtiva || !end || now >= end;
+
+      if (isExpired) {
+        session.isActive = false;
+        session.terminatedReason = user.planoId === 'teste-2h' ? 'TRIAL_EXPIRED' : 'SUBSCRIPTION_EXPIRED';
+        session.terminatedAt = now.toISOString();
+        user.assinaturaAtiva = false;
+
+        this.saveLocal();
+        this.pgInsertSession(session);
+        this.pgInsertUser(user);
+
+        return { 
+          valid: false, 
+          reason: session.terminatedReason,
+          isTrialExpired: user.planoId === 'teste-2h',
+          message: user.planoId === 'teste-2h'
+            ? 'Seu período de teste gratuito de 2 horas encerrou. Para continuar assistindo, assine um de nossos planos!'
+            : 'Sua assinatura expirou. Renove seu plano para continuar assistindo.'
+        };
       }
     }
 

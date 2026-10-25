@@ -143,6 +143,10 @@ export async function logoutUser() {
 }
 
 export async function checkHeartbeat() {
+  const user = getAuthUser();
+  // Revendedores B2B são parceiros comerciais e não possuem sessão de streaming sujeita a queda
+  if (user?.role === 'reseller') return { active: true, user };
+
   const token = getAuthToken();
   const sessionId = getSessionId();
   if (!token || !sessionId) return null;

@@ -893,7 +893,7 @@ const server = http.createServer(async (req, res) => {
         email: email ? String(email).trim() : ''
       });
 
-      const session = db.createSession(reseller.id, deviceId, deviceInfo, 1);
+      const session = db.createSession(reseller.id, deviceId, deviceInfo, 10);
       const token = generateToken({ userId: reseller.id, sessionId: session.id });
 
       sendJson(res, 201, {
@@ -942,7 +942,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const session = db.createSession(user.id, deviceId, deviceInfo, 1);
+      const session = db.createSession(user.id, deviceId, deviceInfo, isMaster ? 999 : 10);
       const token = generateToken({ userId: user.id, sessionId: session.id });
 
       sendJson(res, 200, {

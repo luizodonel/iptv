@@ -164,18 +164,11 @@ export default function ResellerAuth({ initialMode = 'login', onAuthSuccess, onN
     <div className="reseller-portal-container">
       {/* Top Header */}
       <header className="reseller-topbar">
-        <div className="reseller-logo" onClick={onNavigateToTv}>
+        <div className="reseller-logo">
           <span className="reseller-logo-badge">B2B</span>
           <span className="reseller-logo-text">
             CineStream <span style={{ color: '#f59e0b' }}>Revenda</span>
           </span>
-        </div>
-
-        <div className="reseller-topbar-actions">
-          <button className="reseller-nav-link" onClick={onNavigateToTv} title="Voltar ao Streaming de Vídeo">
-            <Tv size={16} />
-            <span>Voltar ao Streaming</span>
-          </button>
         </div>
       </header>
 

@@ -189,11 +189,6 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
             <span>Atualizar</span>
           </button>
 
-          <button className="reseller-nav-link" onClick={onNavigateToTv} title="Assistir Streaming CineStream">
-            <Tv size={16} />
-            <span>Ver Canais / TV</span>
-          </button>
-
           <button
             className="reseller-nav-link"
             onClick={onLogout}

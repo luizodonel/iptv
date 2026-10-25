@@ -93,11 +93,14 @@ export default function App() {
   }, []);
 
   const navigateToTv = useCallback(() => {
+    // Revendedores têm acesso restrito ao B2B e não podem entrar na TV
+    if (currentUser?.role === 'reseller') return;
+
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', '/');
       setIsResellerRoute(false);
     }
-  }, []);
+  }, [currentUser]);
 
   // Channels state
   const [channels, setChannels] = useState([]);
@@ -197,7 +200,7 @@ export default function App() {
 
   // Heartbeat periódico (a cada 20s) para detecção instantânea de sessão ativa
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || currentUser.role === 'reseller') return;
     const interval = setInterval(() => {
       checkHeartbeat();
     }, 20000);
@@ -408,8 +411,10 @@ export default function App() {
     return matchesCat && matchesSearch;
   });
 
-  if (isResellerRoute) {
-    return <ResellerPortal onNavigateToTv={navigateToTv} />;
+  const isResellerUser = currentUser?.role === 'reseller';
+
+  if (isResellerRoute || isResellerUser) {
+    return <ResellerPortal />;
   }
 
   return (

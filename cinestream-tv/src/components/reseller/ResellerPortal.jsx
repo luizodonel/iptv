@@ -4,14 +4,17 @@ import ResellerAuth from './ResellerAuth';
 import ResellerDashboard from './ResellerDashboard';
 import { getAuthUser, logoutUser } from '../../services/authService';
 
-export default function ResellerPortal({ onNavigateToTv }) {
+export default function ResellerPortal() {
   const [currentUser, setCurrentUser] = useState(() => getAuthUser());
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
   useEffect(() => {
     const handlePopState = () => {
       setCurrentPath(window.location.pathname);
-      setCurrentUser(getAuthUser());
+      const user = getAuthUser();
+      if (user) {
+        setCurrentUser(user);
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -19,7 +22,8 @@ export default function ResellerPortal({ onNavigateToTv }) {
 
   useEffect(() => {
     const handleAuthChange = (e) => {
-      setCurrentUser(e.detail?.user || null);
+      const user = e.detail?.user;
+      setCurrentUser(user || null);
     };
     window.addEventListener('cinestream_auth_changed', handleAuthChange);
     return () => window.removeEventListener('cinestream_auth_changed', handleAuthChange);
@@ -47,17 +51,11 @@ export default function ResellerPortal({ onNavigateToTv }) {
     setCurrentPath('/revenda/login');
   };
 
-  const handleGoToTv = () => {
-    window.history.pushState({}, '', '/');
-    if (onNavigateToTv) onNavigateToTv();
-  };
-
   if (isResellerOrMaster) {
     return (
       <ResellerDashboard
         currentUser={currentUser}
         onLogout={handleLogout}
-        onNavigateToTv={handleGoToTv}
       />
     );
   }
@@ -66,7 +64,6 @@ export default function ResellerPortal({ onNavigateToTv }) {
     <ResellerAuth
       initialMode={initialAuthMode}
       onAuthSuccess={handleAuthSuccess}
-      onNavigateToTv={handleGoToTv}
     />
   );
 }
