@@ -8,12 +8,15 @@ import { fileURLToPath } from 'node:url';
 import { db, normalizeIp } from './db.js';
 import { 
   PLANS, 
+  RESELLER_PLANS,
   hashPassword, 
   verifyPassword, 
   generateToken, 
   verifyToken, 
   sanitizeUser, 
-  isUserSubscriptionActive 
+  isUserSubscriptionActive,
+  isValidCpfOrCnpj,
+  formatCpfCnpj
 } from './authService.js';
 import { mercadoPagoService } from './mercadoPagoService.js';
 
@@ -672,6 +675,639 @@ const server = http.createServer(async (req, res) => {
       total: (db.data.accessLogs || []).length,
       logs
     });
+    return;
+  }
+
+  // --- Middleware de Validação do Revendedor / Lojista (B2B) ---
+  function requireResellerAuth(req, res) {
+    const auth = authenticateUser(req);
+    if (!auth) {
+      sendJson(res, 401, { error: 'Autenticação necessária. Faça login no portal do Revendedor.' });
+      return null;
+    }
+    const username = (auth.user.username || '').toLowerCase().trim();
+    const isMaster = username === 'odonel' || auth.user.role === 'admin' || auth.user.isMaster === true;
+    const isReseller = auth.user.role === 'reseller' || isMaster;
+
+    if (!isReseller) {
+      sendJson(res, 403, { error: 'Acesso negado. Esta área é restrita a lojistas e revendedores credenciados.' });
+      return null;
+    }
+
+    if (!isMaster && auth.user.status === 'bloqueado') {
+      sendJson(res, 403, { error: 'Sua conta de revendedor está bloqueada pela administração Master.' });
+      return null;
+    }
+
+    return auth;
+  }
+
+  // --- Rotas de Gestão de Revendedores do Painel Master Odonel ---
+
+  // Listar todos os lojistas/revendedores cadastrados
+  if (pathname === '/api/master/resellers' && req.method === 'GET') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+    const resellers = db.getAllResellers();
+    sendJson(res, 200, { success: true, resellers });
+    return;
+  }
+
+  // Alterar status do lojista (ativo / bloqueado / inativo)
+  if (pathname === '/api/master/resellers/status' && req.method === 'POST') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { resellerId, status } = body;
+      if (!resellerId || !status) {
+        sendJson(res, 400, { error: 'resellerId e status são obrigatórios.' });
+        return;
+      }
+      const updated = db.updateResellerStatus(resellerId, status);
+      sendJson(res, 200, {
+        success: true,
+        reseller: sanitizeUser(updated),
+        message: `Status do revendedor atualizado para "${status}".`
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // Ajuste manual de créditos pelo Master (adicionar / remover com log de auditoria)
+  if (pathname === '/api/master/resellers/adjust-credits' && req.method === 'POST') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { resellerId, plano, delta, motivo } = body;
+      if (!resellerId || !plano || delta === undefined) {
+        sendJson(res, 400, { error: 'resellerId, plano e delta são obrigatórios.' });
+        return;
+      }
+
+      const result = db.adjustResellerCredits(resellerId, {
+        plano,
+        delta,
+        motivo,
+        masterUsername: auth.user.username
+      });
+
+      sendJson(res, 200, {
+        success: true,
+        saldoNovo: result.saldoNovo,
+        tx: result.tx,
+        message: `Créditos do revendedor ajustados com sucesso! Novo saldo ${plano}: ${result.saldoNovo}`
+      });
+    } catch (err) {
+      sendJson(res, 400, { error: err.message });
+    }
+    return;
+  }
+
+  // Redefinir senha de revendedor pelo Master
+  if (pathname === '/api/master/resellers/reset-password' && req.method === 'POST') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { resellerId, newPassword } = body;
+      if (!resellerId || !newPassword || newPassword.trim().length < 4) {
+        sendJson(res, 400, { error: 'resellerId e newPassword (mínimo 4 caracteres) são obrigatórios.' });
+        return;
+      }
+
+      const senhaHash = hashPassword(newPassword.trim());
+      db.setMasterUserPassword(resellerId, senhaHash, true);
+      sendJson(res, 200, { success: true, message: 'Senha do revendedor redefinida com sucesso!' });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // Excluir revendedor pelo Master
+  const matchMasterDeleteReseller = pathname.match(/^\/api\/master\/resellers\/([^/]+)$/);
+  if (matchMasterDeleteReseller && req.method === 'DELETE') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const resellerId = matchMasterDeleteReseller[1];
+      db.deleteReseller(resellerId);
+      sendJson(res, 200, { success: true, message: 'Revendedor excluído com sucesso.' });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // Listar clientes gerados por revendedores (Master)
+  if (pathname === '/api/master/resellers/clients' && req.method === 'GET') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    const filterResellerId = parsedUrl.searchParams.get('resellerId') || null;
+    const clients = db.getAllResellerClients(filterResellerId);
+    sendJson(res, 200, { success: true, clients });
+    return;
+  }
+
+  // Histórico de pedidos de créditos pagos pelos revendedores (Master)
+  if (pathname === '/api/master/resellers/orders' && req.method === 'GET') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    const orders = db.getAllResellerOrders(200);
+    sendJson(res, 200, { success: true, orders });
+    return;
+  }
+
+  // Extrato global de transações e movimentações de revenda (Master)
+  if (pathname === '/api/master/resellers/transactions' && req.method === 'GET') {
+    const auth = requireMasterAuth(req, res);
+    if (!auth) return;
+
+    const limit = parseInt(parsedUrl.searchParams.get('limit') || '300', 10);
+    const transactions = db.getAllResellerTransactions(limit);
+    sendJson(res, 200, { success: true, transactions });
+    return;
+  }
+
+  // ==========================================
+  // --- ROTAS DO MÓDULO B2B / REVENDA ---
+  // ==========================================
+
+  // 1. Planos e Preços de Créditos
+  if (pathname === '/api/reseller/plans' && req.method === 'GET') {
+    sendJson(res, 200, { success: true, plans: RESELLER_PLANS });
+    return;
+  }
+
+  // 2. Cadastro de Lojista / Revendedor (/revenda/cadastro)
+  if (pathname === '/api/reseller/register' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const { cpfCnpj, telefone, senha, confirmarSenha, nome, email, deviceId, deviceInfo } = body;
+
+      const cleanCpfCnpj = String(cpfCnpj || '').replace(/\D/g, '');
+      const cleanTelefone = String(telefone || '').trim();
+
+      if (!cleanCpfCnpj || !cleanTelefone || !senha) {
+        sendJson(res, 400, { error: 'CPF ou CNPJ, Telefone/WhatsApp e Senha são obrigatórios.' });
+        return;
+      }
+
+      if (!isValidCpfOrCnpj(cleanCpfCnpj)) {
+        sendJson(res, 400, { error: 'O CPF ou CNPJ informado é inválido. Por favor, confira os números digitados.' });
+        return;
+      }
+
+      if (confirmarSenha !== undefined && senha !== confirmarSenha) {
+        sendJson(res, 400, { error: 'A confirmação de senha não confere com a senha digitada.' });
+        return;
+      }
+
+      if (senha.length < 6) {
+        sendJson(res, 400, { error: 'A senha deve conter no mínimo 6 caracteres.' });
+        return;
+      }
+
+      const existingCpf = db.findUserByCpf(cleanCpfCnpj);
+      if (existingCpf) {
+        sendJson(res, 409, { error: 'Este CPF/CNPJ já está cadastrado no sistema.' });
+        return;
+      }
+
+      const senhaHash = hashPassword(senha);
+      const reseller = db.createReseller({
+        cpfCnpj: cleanCpfCnpj,
+        telefone: cleanTelefone,
+        senhaHash,
+        nome: nome ? String(nome).trim() : `Lojista ${cleanCpfCnpj.slice(-4)}`,
+        email: email ? String(email).trim() : ''
+      });
+
+      const session = db.createSession(reseller.id, deviceId, deviceInfo, 1);
+      const token = generateToken({ userId: reseller.id, sessionId: session.id });
+
+      sendJson(res, 201, {
+        success: true,
+        token,
+        sessionId: session.id,
+        user: sanitizeUser(reseller),
+        reseller: sanitizeUser(reseller),
+        credits: db.getResellerCredits(reseller.id),
+        message: 'Cadastro de lojista realizado com sucesso! Carteira de créditos inicializada zerada.'
+      });
+    } catch (err) {
+      console.error('Erro no cadastro de revendedor:', err);
+      sendJson(res, 500, { error: 'Erro ao cadastrar revendedor: ' + err.message });
+    }
+    return;
+  }
+
+  // 3. Login de Lojista / Revendedor (/revenda/login)
+  if (pathname === '/api/reseller/login' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const identifier = (body.identifier || body.login || body.cpfCnpj || body.username || '').trim();
+      const senha = body.senha;
+      const { deviceId, deviceInfo } = body;
+
+      if (!identifier || !senha) {
+        sendJson(res, 400, { error: 'CPF/CNPJ e Senha são obrigatórios.' });
+        return;
+      }
+
+      const user = db.findResellerByLogin(identifier);
+      if (!user || !verifyPassword(senha, user.senhaHash)) {
+        sendJson(res, 401, { error: 'Identificador (CPF/CNPJ) ou senha incorretos.' });
+        return;
+      }
+
+      const isMaster = (user.username || '').toLowerCase() === 'odonel' || user.role === 'admin' || user.isMaster;
+      if (!isMaster && user.role !== 'reseller') {
+        sendJson(res, 403, { error: 'Esta conta não possui perfil de Revendedor/Lojista.' });
+        return;
+      }
+
+      if (!isMaster && user.status === 'bloqueado') {
+        sendJson(res, 403, { error: 'Sua conta de revendedor está bloqueada pela administração Master.' });
+        return;
+      }
+
+      const session = db.createSession(user.id, deviceId, deviceInfo, 1);
+      const token = generateToken({ userId: user.id, sessionId: session.id });
+
+      sendJson(res, 200, {
+        success: true,
+        token,
+        sessionId: session.id,
+        user: sanitizeUser(user),
+        reseller: sanitizeUser(user),
+        credits: db.getResellerCredits(user.id),
+        message: 'Login realizado com sucesso!'
+      });
+    } catch (err) {
+      console.error('Erro no login de revendedor:', err);
+      sendJson(res, 500, { error: 'Erro ao processar login: ' + err.message });
+    }
+    return;
+  }
+
+  // 4. Perfil e Saldo de Créditos do Revendedor Atual
+  if (pathname === '/api/reseller/me' && req.method === 'GET') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    sendJson(res, 200, {
+      success: true,
+      reseller: sanitizeUser(auth.user),
+      credits: db.getResellerCredits(auth.user.id)
+    });
+    return;
+  }
+
+  // 5. Compra de Créditos pelo Lojista (Checkout PIX)
+  if (pathname === '/api/reseller/credits/buy' && req.method === 'POST') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { plano, quantidade } = body;
+
+      const pKey = String(plano || '').toLowerCase().trim();
+      const planInfo = RESELLER_PLANS[pKey];
+      if (!planInfo) {
+        sendJson(res, 400, { error: 'Plano de créditos inválido. Escolha entre mensal, trimestral, semestral ou anual.' });
+        return;
+      }
+
+      const qtd = parseInt(quantidade, 10);
+      if (isNaN(qtd) || qtd <= 0) {
+        sendJson(res, 400, { error: 'Informe uma quantidade válida de créditos maior que zero.' });
+        return;
+      }
+
+      const valorUnitario = planInfo.preco;
+      const valorTotal = Number((qtd * valorUnitario).toFixed(2));
+
+      // Criação de cobrança Pix
+      const mpResponse = await mercadoPagoService.criarPagamentoCreditosPix(auth.user, planInfo.nome, qtd, valorTotal);
+      const mpId = mpResponse.id;
+      const td = mpResponse.point_of_interaction?.transaction_data || {};
+      const qrCode = td.qr_code || '';
+      const qrCodeBase64 = td.qr_code_base64 || '';
+
+      const order = db.createResellerOrder({
+        resellerId: auth.user.id,
+        plano: pKey,
+        quantidade: qtd,
+        valorUnitario,
+        valorTotal,
+        mercadoPagoId: mpId,
+        qrCode,
+        qrCodeBase64
+      });
+
+      sendJson(res, 201, {
+        success: true,
+        orderId: order.id,
+        mercadoPagoId: mpId,
+        plano: pKey,
+        planoNome: planInfo.nome,
+        quantidade: qtd,
+        valorUnitario,
+        valorTotal,
+        qrCode,
+        qrCodeBase64,
+        status: 'PENDING'
+      });
+    } catch (err) {
+      console.error('Erro ao comprar créditos de revenda:', err);
+      sendJson(res, 500, { error: 'Erro ao gerar Pix de créditos: ' + err.message });
+    }
+    return;
+  }
+
+  // 6. Consultar Status do Pedido de Créditos
+  const matchResellerOrderStatus = pathname.match(/^\/api\/reseller\/credits\/order-status\/([^/]+)$/);
+  if (matchResellerOrderStatus && req.method === 'GET') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const orderId = matchResellerOrderStatus[1];
+      const order = db.findResellerOrderById(orderId) || db.findResellerOrderByMpId(orderId);
+
+      if (!order) {
+        sendJson(res, 404, { error: 'Pedido de créditos não encontrado.' });
+        return;
+      }
+
+      if (order.status === 'APPROVED') {
+        sendJson(res, 200, {
+          success: true,
+          status: 'APPROVED',
+          order,
+          credits: db.getResellerCredits(auth.user.id)
+        });
+        return;
+      }
+
+      if (order.mercadoPagoId) {
+        const mpStatus = await mercadoPagoService.consultarStatusPagamento(order.mercadoPagoId);
+        if (mpStatus && mpStatus.status === 'approved') {
+          db.approveResellerOrder(order.id);
+          sendJson(res, 200, {
+            success: true,
+            status: 'APPROVED',
+            order,
+            credits: db.getResellerCredits(auth.user.id),
+            message: 'Pagamento confirmado! Seus créditos foram adicionados com sucesso.'
+          });
+          return;
+        }
+      }
+
+      sendJson(res, 200, {
+        success: true,
+        status: order.status,
+        order,
+        credits: db.getResellerCredits(auth.user.id)
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // 7. Simular Aprovação de Pagamento de Crédito (Demo / Teste Instantâneo)
+  if (pathname === '/api/reseller/credits/simulate-approve' && req.method === 'POST') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { orderId } = body;
+      const approved = db.approveResellerOrder(orderId);
+      sendJson(res, 200, {
+        success: true,
+        status: 'APPROVED',
+        credits: db.getResellerCredits(auth.user.id),
+        order: approved.order,
+        message: 'Créditos liberados com sucesso!'
+      });
+    } catch (err) {
+      sendJson(res, 400, { error: err.message });
+    }
+    return;
+  }
+
+  // 8. Listar Clientes Finais Criados pelo Revendedor
+  if (pathname === '/api/reseller/clients' && req.method === 'GET') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    const clients = db.getClientsByReseller(auth.user.id);
+    sendJson(res, 200, { success: true, clients });
+    return;
+  }
+
+  // 9. Criar Cliente Final pelo Lojista (Validação e Débito de Créditos)
+  if (pathname === '/api/reseller/clients' && req.method === 'POST') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { username, senha, plano, telas, nome, telefone, email } = body;
+
+      const cleanUsername = String(username || '').trim().toLowerCase();
+      if (!cleanUsername || !senha) {
+        sendJson(res, 400, { error: 'Nome de usuário e Senha do cliente são obrigatórios.' });
+        return;
+      }
+
+      const pKey = String(plano || 'mensal').toLowerCase().trim();
+      const planInfo = RESELLER_PLANS[pKey];
+      if (!planInfo) {
+        sendJson(res, 400, { error: 'Tipo de plano inválido. Escolha entre Mensal, Trimestral, Semestral ou Anual.' });
+        return;
+      }
+
+      const screenCount = Math.max(1, parseInt(telas, 10) || 1);
+      const credits = db.getResellerCredits(auth.user.id);
+      const availableCredits = credits[pKey] || 0;
+
+      // Validação de saldo conforme regra: Saldo Necessário = Quantidade de Telas
+      if (availableCredits < screenCount) {
+        sendJson(res, 400, {
+          error: `Saldo insuficiente de créditos para o plano ${planInfo.nome}. Você possui ${availableCredits} crédito(s), mas precisa de ${screenCount} para liberar ${screenCount} tela(s). Faça uma recarga de créditos.`,
+          required: screenCount,
+          available: availableCredits,
+          plan: pKey
+        });
+        return;
+      }
+
+      const senhaHash = hashPassword(senha);
+      const result = db.createClientByReseller(auth.user.id, {
+        username: cleanUsername,
+        senhaHash,
+        planoKey: pKey,
+        telas: screenCount,
+        nome,
+        telefone,
+        email
+      });
+
+      const client = result.client;
+      const dataExp = new Date(client.fimAssinatura).toLocaleDateString('pt-BR');
+
+      const whatsappText = `🌟 *SEU ACESSO CINESTREAM ESTÁ LIBERADO!* 🌟\n\n` +
+        `👤 *Usuário:* ${cleanUsername}\n` +
+        `🔑 *Senha:* ${senha}\n` +
+        `📺 *Telas Simultâneas:* ${screenCount} tela(s)\n` +
+        `🗓️ *Validade:* ${dataExp} (${planInfo.nome})\n\n` +
+        `🌐 *Acesse agora:* https://topcanais.tv\n\n` +
+        `Bom entretenimento! Se precisar de ajuda, conte conosco.`;
+
+      sendJson(res, 201, {
+        success: true,
+        client: sanitizeUser(client),
+        rawPassword: senha,
+        saldoRestante: result.saldoRestante,
+        whatsappText,
+        message: `Cliente @${cleanUsername} criado com sucesso! ${screenCount} crédito(s) ${pKey} debitado(s).`
+      });
+    } catch (err) {
+      console.error('Erro ao criar cliente pelo revendedor:', err);
+      sendJson(res, 400, { error: err.message });
+    }
+    return;
+  }
+
+  // 10. Renovar Assinatura de Cliente pelo Lojista
+  if (pathname === '/api/reseller/clients/renew' && req.method === 'POST') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { clientId, plano, telas } = body;
+      const result = db.renewClientByReseller(auth.user.id, clientId, {
+        planoKey: plano,
+        telas
+      });
+
+      sendJson(res, 200, {
+        success: true,
+        client: sanitizeUser(result.client),
+        saldoRestante: result.saldoRestante,
+        message: `Assinatura de @${result.client.username} renovada com sucesso!`
+      });
+    } catch (err) {
+      sendJson(res, 400, { error: err.message });
+    }
+    return;
+  }
+
+  // 11. Redefinir Senha do Cliente pelo Lojista
+  if (pathname === '/api/reseller/clients/reset-password' && req.method === 'POST') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { clientId, newPassword } = body;
+
+      const client = db.findUserById(clientId);
+      if (!client) {
+        sendJson(res, 404, { error: 'Cliente não encontrado.' });
+        return;
+      }
+
+      const isMaster = (auth.user.username || '').toLowerCase() === 'odonel' || auth.user.role === 'admin';
+      if (!isMaster && client.resellerId !== auth.user.id) {
+        sendJson(res, 403, { error: 'Você não tem permissão para alterar a senha deste cliente.' });
+        return;
+      }
+
+      if (!newPassword || newPassword.trim().length < 4) {
+        sendJson(res, 400, { error: 'A nova senha deve ter no mínimo 4 caracteres.' });
+        return;
+      }
+
+      const senhaHash = hashPassword(newPassword.trim());
+      db.setMasterUserPassword(clientId, senhaHash, true);
+
+      sendJson(res, 200, {
+        success: true,
+        message: `Senha de @${client.username} alterada com sucesso!`
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // 12. Desconectar Sessões Ativas do Cliente pelo Lojista
+  if (pathname === '/api/reseller/clients/kick' && req.method === 'POST') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const { clientId } = body;
+
+      const client = db.findUserById(clientId);
+      if (!client) {
+        sendJson(res, 404, { error: 'Cliente não encontrado.' });
+        return;
+      }
+
+      const isMaster = (auth.user.username || '').toLowerCase() === 'odonel' || auth.user.role === 'admin';
+      if (!isMaster && client.resellerId !== auth.user.id) {
+        sendJson(res, 403, { error: 'Você não tem permissão para desconectar este cliente.' });
+        return;
+      }
+
+      const count = db.terminateUserSessions(clientId, 'Sessão encerrada pelo seu revendedor.');
+      sendJson(res, 200, {
+        success: true,
+        message: `${count} sessão(ões) encerrada(s) com sucesso.`
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  // 13. Extrato de Transações de Créditos do Revendedor
+  if (pathname === '/api/reseller/transactions' && req.method === 'GET') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    const transactions = db.getResellerTransactions(auth.user.id);
+    sendJson(res, 200, { success: true, transactions });
+    return;
+  }
+
+  // 14. Histórico de Pedidos de Créditos do Revendedor
+  if (pathname === '/api/reseller/orders' && req.method === 'GET') {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    const orders = db.getResellerOrders(auth.user.id);
+    sendJson(res, 200, { success: true, orders });
     return;
   }
 

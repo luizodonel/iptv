@@ -31,7 +31,9 @@ const DEFAULT_DATA = {
   sessions: [],
   pagamentos: [],
   testedIps: [],
-  accessLogs: []
+  accessLogs: [],
+  resellerTransactions: [],
+  resellerOrders: []
 };
 
 // Configuração do pool de conexão com PostgreSQL
@@ -55,7 +57,9 @@ class Database {
           sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
           pagamentos: Array.isArray(parsed.pagamentos) ? parsed.pagamentos : [],
           testedIps: Array.isArray(parsed.testedIps) ? parsed.testedIps : [],
-          accessLogs: Array.isArray(parsed.accessLogs) ? parsed.accessLogs : []
+          accessLogs: Array.isArray(parsed.accessLogs) ? parsed.accessLogs : [],
+          resellerTransactions: Array.isArray(parsed.resellerTransactions) ? parsed.resellerTransactions : [],
+          resellerOrders: Array.isArray(parsed.resellerOrders) ? parsed.resellerOrders : []
         };
       }
     } catch (err) {
@@ -154,19 +158,59 @@ class Database {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS reseller_transactions (
+          id VARCHAR(64) PRIMARY KEY,
+          reseller_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          tipo VARCHAR(50) NOT NULL,
+          plano VARCHAR(50) NOT NULL,
+          quantidade INT NOT NULL,
+          saldo_anterior INT NOT NULL,
+          saldo_novo INT NOT NULL,
+          valor NUMERIC(10, 2) DEFAULT 0,
+          pagamento_id VARCHAR(64),
+          cliente_id VARCHAR(64),
+          cliente_username VARCHAR(100),
+          descricao TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS reseller_orders (
+          id VARCHAR(64) PRIMARY KEY,
+          reseller_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+          plano VARCHAR(50) NOT NULL,
+          quantidade INT NOT NULL,
+          valor_unitario NUMERIC(10, 2) NOT NULL,
+          valor_total NUMERIC(10, 2) NOT NULL,
+          mercado_pago_id VARCHAR(100),
+          qr_code TEXT,
+          qr_code_base64 TEXT,
+          status VARCHAR(50) DEFAULT 'PENDING',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          approved_at TIMESTAMPTZ
+        );
+
         -- Garantir migração de colunas na tabela users se já existia
         ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ip VARCHAR(64);
         ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_ip VARCHAR(64);
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(30) DEFAULT 'user';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS reseller_id VARCHAR(64);
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'ativo';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS creditos_mensal INT DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS creditos_trimestral INT DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS creditos_semestral INT DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS creditos_anual INT DEFAULT 0;
       `);
 
       // Carrega registros existentes no PostgreSQL para a memória
-      const [uRes, sRes, pRes, tRes, aRes] = await Promise.all([
+      const [uRes, sRes, pRes, tRes, aRes, rtRes, roRes] = await Promise.all([
         this.pool.query('SELECT * FROM users;'),
         this.pool.query('SELECT * FROM sessions;'),
         this.pool.query('SELECT * FROM pagamentos;'),
         this.pool.query('SELECT * FROM tested_ips;').catch(() => ({ rows: [] })),
-        this.pool.query('SELECT * FROM access_logs ORDER BY created_at DESC LIMIT 500;').catch(() => ({ rows: [] }))
+        this.pool.query('SELECT * FROM access_logs ORDER BY created_at DESC LIMIT 500;').catch(() => ({ rows: [] })),
+        this.pool.query('SELECT * FROM reseller_transactions ORDER BY created_at DESC LIMIT 2000;').catch(() => ({ rows: [] })),
+        this.pool.query('SELECT * FROM reseller_orders ORDER BY created_at DESC LIMIT 1000;').catch(() => ({ rows: [] }))
       ]);
 
       if (uRes.rows.length > 0) {
@@ -187,7 +231,14 @@ class Database {
           fimAssinatura: r.fim_assinatura ? new Date(r.fim_assinatura).toISOString() : null,
           trialUsed: Boolean(r.trial_used),
           trialIp: r.trial_ip || null,
-          registrationIp: r.registration_ip || null
+          registrationIp: r.registration_ip || null,
+          role: r.role || (r.username === 'odonel' ? 'admin' : 'user'),
+          resellerId: r.reseller_id || null,
+          status: r.status || 'ativo',
+          creditosMensal: Number(r.creditos_mensal) || 0,
+          creditosTrimestral: Number(r.creditos_trimestral) || 0,
+          creditosSemestral: Number(r.creditos_semestral) || 0,
+          creditosAnual: Number(r.creditos_anual) || 0
         }));
 
         this.data.sessions = sRes.rows.map(r => ({
@@ -240,7 +291,42 @@ class Database {
           }));
         }
 
-        console.log(`✅ PostgreSQL carregado com sucesso: ${uRes.rows.length} usuários, ${sRes.rows.length} sessões, ${pRes.rows.length} pagamentos, ${this.data.testedIps.length} IPs testados, ${this.data.accessLogs.length} acessos recentes.`);
+        if (rtRes && rtRes.rows.length > 0) {
+          this.data.resellerTransactions = rtRes.rows.map(r => ({
+            id: r.id,
+            resellerId: r.reseller_id,
+            tipo: r.tipo,
+            plano: r.plano,
+            quantidade: r.quantidade,
+            saldoAnterior: r.saldo_anterior,
+            saldoNovo: r.saldo_novo,
+            valor: Number(r.valor) || 0,
+            pagamentoId: r.pagamento_id,
+            clienteId: r.cliente_id,
+            clienteUsername: r.cliente_username,
+            descricao: r.descricao,
+            createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+          }));
+        }
+
+        if (roRes && roRes.rows.length > 0) {
+          this.data.resellerOrders = roRes.rows.map(r => ({
+            id: r.id,
+            resellerId: r.reseller_id,
+            plano: r.plano,
+            quantidade: r.quantidade,
+            valorUnitario: Number(r.valor_unitario),
+            valorTotal: Number(r.valor_total),
+            mercadoPagoId: r.mercado_pago_id,
+            qrCode: r.qr_code,
+            qrCodeBase64: r.qr_code_base64,
+            status: r.status,
+            createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+            approvedAt: r.approved_at ? new Date(r.approved_at).toISOString() : null
+          }));
+        }
+
+        console.log(`✅ PostgreSQL carregado com sucesso: ${uRes.rows.length} usuários, ${sRes.rows.length} sessões, ${pRes.rows.length} pagamentos, ${this.data.testedIps.length} IPs testados, ${this.data.accessLogs.length} acessos recentes, ${(this.data.resellerTransactions || []).length} transações revenda.`);
       } else if (this.data.users.length > 0) {
         console.log('🔄 Migrando dados locais para o PostgreSQL...');
         for (const u of this.data.users) {
@@ -258,6 +344,12 @@ class Database {
         for (const a of this.data.accessLogs) {
           await this.pgInsertAccessLog(a);
         }
+        for (const tx of (this.data.resellerTransactions || [])) {
+          await this.pgInsertResellerTransaction(tx);
+        }
+        for (const ro of (this.data.resellerOrders || [])) {
+          await this.pgInsertResellerOrder(ro);
+        }
       }
 
       this.saveLocal();
@@ -271,14 +363,20 @@ class Database {
     if (!this.pool) return;
     try {
       await this.pool.query(`
-        INSERT INTO users (id, username, nome, telefone, email, senha_hash, cpf, created_at, assinatura_ativa, plano_id, plano_nome, limite_telas, data_assinatura, fim_assinatura, trial_used, trial_ip, registration_ip)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        INSERT INTO users (
+          id, username, nome, telefone, email, senha_hash, cpf, created_at,
+          assinatura_ativa, plano_id, plano_nome, limite_telas, data_assinatura, fim_assinatura,
+          trial_used, trial_ip, registration_ip, role, reseller_id, status,
+          creditos_mensal, creditos_trimestral, creditos_semestral, creditos_anual
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
         ON CONFLICT (id) DO UPDATE SET
           username = EXCLUDED.username,
           nome = EXCLUDED.nome,
           telefone = EXCLUDED.telefone,
           email = EXCLUDED.email,
           senha_hash = EXCLUDED.senha_hash,
+          cpf = EXCLUDED.cpf,
           assinatura_ativa = EXCLUDED.assinatura_ativa,
           plano_id = EXCLUDED.plano_id,
           plano_nome = EXCLUDED.plano_nome,
@@ -287,14 +385,61 @@ class Database {
           fim_assinatura = EXCLUDED.fim_assinatura,
           trial_used = EXCLUDED.trial_used,
           trial_ip = EXCLUDED.trial_ip,
-          registration_ip = EXCLUDED.registration_ip;
+          registration_ip = EXCLUDED.registration_ip,
+          role = EXCLUDED.role,
+          reseller_id = EXCLUDED.reseller_id,
+          status = EXCLUDED.status,
+          creditos_mensal = EXCLUDED.creditos_mensal,
+          creditos_trimestral = EXCLUDED.creditos_trimestral,
+          creditos_semestral = EXCLUDED.creditos_semestral,
+          creditos_anual = EXCLUDED.creditos_anual;
       `, [
         u.id, u.username, u.nome, u.telefone, u.email, u.senhaHash, u.cpf,
         u.createdAt, u.assinaturaAtiva, u.planoId, u.planoNome, u.limiteTelas,
-        u.dataAssinatura, u.fimAssinatura, u.trialUsed || false, u.trialIp || null, u.registrationIp || null
+        u.dataAssinatura, u.fimAssinatura, u.trialUsed || false, u.trialIp || null, u.registrationIp || null,
+        u.role || (u.username === 'odonel' ? 'admin' : 'user'), u.resellerId || null, u.status || 'ativo',
+        Number(u.creditosMensal) || 0, Number(u.creditosTrimestral) || 0,
+        Number(u.creditosSemestral) || 0, Number(u.creditosAnual) || 0
       ]);
     } catch (err) {
       console.error('Erro pgInsertUser:', err.message);
+    }
+  }
+
+  async pgInsertResellerTransaction(tx) {
+    if (!this.pool) return;
+    try {
+      await this.pool.query(`
+        INSERT INTO reseller_transactions (id, reseller_id, tipo, plano, quantidade, saldo_anterior, saldo_novo, valor, pagamento_id, cliente_id, cliente_username, descricao, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (id) DO NOTHING;
+      `, [
+        tx.id, tx.resellerId, tx.tipo, tx.plano, tx.quantidade,
+        tx.saldoAnterior, tx.saldoNovo, tx.valor || 0, tx.pagamentoId || null,
+        tx.clienteId || null, tx.clienteUsername || null, tx.descricao || null,
+        tx.createdAt || new Date().toISOString()
+      ]);
+    } catch (err) {
+      console.error('Erro pgInsertResellerTransaction:', err.message);
+    }
+  }
+
+  async pgInsertResellerOrder(o) {
+    if (!this.pool) return;
+    try {
+      await this.pool.query(`
+        INSERT INTO reseller_orders (id, reseller_id, plano, quantidade, valor_unitario, valor_total, mercado_pago_id, qr_code, qr_code_base64, status, created_at, approved_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (id) DO UPDATE SET
+          status = EXCLUDED.status,
+          approved_at = EXCLUDED.approved_at;
+      `, [
+        o.id, o.resellerId, o.plano, o.quantidade, o.valorUnitario, o.valorTotal,
+        o.mercadoPagoId || null, o.qrCode || '', o.qrCodeBase64 || '',
+        o.status || 'PENDING', o.createdAt || new Date().toISOString(), o.approvedAt || null
+      ]);
+    } catch (err) {
+      console.error('Erro pgInsertResellerOrder:', err.message);
     }
   }
 
@@ -471,6 +616,36 @@ class Database {
     return this.data.users.find(u => u.id === id) || null;
   }
 
+  findUserByCpf(cpf) {
+    if (!cpf) return null;
+    const clean = String(cpf).replace(/\D/g, '');
+    if (!clean) return null;
+    return this.data.users.find(u => u.cpf && u.cpf.replace(/\D/g, '') === clean) || null;
+  }
+
+  findResellerByLogin(identifier) {
+    if (!identifier) return null;
+    const clean = String(identifier).trim();
+    const cleanDigits = clean.replace(/\D/g, '');
+    const lower = clean.toLowerCase();
+
+    return this.data.users.find(u => {
+      const isCandidate = u.role === 'reseller' || u.role === 'admin' || (u.username && u.username.toLowerCase() === 'odonel');
+      if (!isCandidate) return false;
+
+      // CPF ou CNPJ
+      if (cleanDigits && cleanDigits.length >= 11 && u.cpf && u.cpf.replace(/\D/g, '') === cleanDigits) return true;
+      // Username
+      if (u.username && u.username.toLowerCase() === lower) return true;
+      // Email
+      if (u.email && u.email.toLowerCase() === lower) return true;
+      // Telefone
+      if (cleanDigits && cleanDigits.length >= 8 && u.telefone && u.telefone.replace(/\D/g, '') === cleanDigits) return true;
+
+      return false;
+    }) || null;
+  }
+
   createUser(userData) {
     const rawUsername = (userData.username || userData.nome || '').trim();
     const cleanUsername = rawUsername.replace(/\s+/g, '').toLowerCase();
@@ -493,7 +668,14 @@ class Database {
       fimAssinatura: userData.fimAssinatura || null,
       trialUsed: Boolean(userData.trialUsed),
       trialIp: userData.trialIp ? normalizeIp(userData.trialIp) : null,
-      registrationIp: userData.registrationIp ? normalizeIp(userData.registrationIp) : null
+      registrationIp: userData.registrationIp ? normalizeIp(userData.registrationIp) : null,
+      role: userData.role || 'user',
+      resellerId: userData.resellerId || null,
+      status: userData.status || 'ativo',
+      creditosMensal: Number(userData.creditosMensal) || 0,
+      creditosTrimestral: Number(userData.creditosTrimestral) || 0,
+      creditosSemestral: Number(userData.creditosSemestral) || 0,
+      creditosAnual: Number(userData.creditosAnual) || 0
     };
 
     this.data.users.push(newUser);
@@ -953,6 +1135,602 @@ class Database {
     this.saveLocal();
     this.pgInsertPagamento(pagamento);
     return pagamento;
+  }
+
+  // ==========================================
+  // --- MÓDULO B2B / REVENDA (CINESTREAM) ---
+  // ==========================================
+
+  createReseller(resellerData) {
+    const cleanCpf = String(resellerData.cpfCnpj || resellerData.cpf || '').replace(/\D/g, '');
+    const rawNome = (resellerData.nome || 'Lojista ' + (cleanCpf ? cleanCpf.slice(-4) : 'B2B')).trim();
+    const rawUsername = (resellerData.username || ('rev_' + (cleanCpf || Date.now().toString(36)))).trim().toLowerCase();
+
+    const existingUser = this.findUserByUsername(rawUsername);
+    if (existingUser) {
+      throw new Error(`O usuário @${rawUsername} já existe.`);
+    }
+
+    if (cleanCpf) {
+      const existingCpf = this.findUserByCpf(cleanCpf);
+      if (existingCpf) {
+        throw new Error('Já existe uma conta cadastrada com este CPF/CNPJ.');
+      }
+    }
+
+    const newReseller = {
+      id: 'res_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      username: rawUsername,
+      nome: rawNome,
+      telefone: resellerData.telefone ? String(resellerData.telefone).trim() : '',
+      email: resellerData.email ? resellerData.email.trim().toLowerCase() : `${rawUsername}@revenda.cinestream.tv`,
+      senhaHash: resellerData.senhaHash,
+      cpf: cleanCpf,
+      role: 'reseller',
+      status: 'ativo',
+      createdAt: new Date().toISOString(),
+      assinaturaAtiva: true,
+      planoId: 'b2b-reseller',
+      planoNome: '💼 Painel de Revenda',
+      limiteTelas: 1,
+      creditosMensal: 0,
+      creditosTrimestral: 0,
+      creditosSemestral: 0,
+      creditosAnual: 0
+    };
+
+    this.data.users.push(newReseller);
+    this.saveLocal();
+    this.pgInsertUser(newReseller);
+    return newReseller;
+  }
+
+  getResellerCredits(resellerId) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) return { mensal: 0, trimestral: 0, semestral: 0, anual: 0 };
+    return {
+      mensal: Number(reseller.creditosMensal) || 0,
+      trimestral: Number(reseller.creditosTrimestral) || 0,
+      semestral: Number(reseller.creditosSemestral) || 0,
+      anual: Number(reseller.creditosAnual) || 0
+    };
+  }
+
+  addResellerCredits(resellerId, plano, quantidade, options = {}) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) throw new Error('Revendedor não encontrado.');
+
+    const pKey = String(plano).toLowerCase().trim();
+    const qtd = parseInt(quantidade, 10);
+    if (isNaN(qtd) || qtd <= 0) throw new Error('Quantidade de créditos inválida.');
+
+    const fieldMap = {
+      mensal: 'creditosMensal',
+      trimestral: 'creditosTrimestral',
+      semestral: 'creditosSemestral',
+      anual: 'creditosAnual'
+    };
+
+    const field = fieldMap[pKey];
+    if (!field) throw new Error(`Tipo de plano inválido: ${plano}`);
+
+    const saldoAnterior = Number(reseller[field]) || 0;
+    const saldoNovo = saldoAnterior + qtd;
+    reseller[field] = saldoNovo;
+
+    const tx = {
+      id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      resellerId: reseller.id,
+      tipo: options.tipo || 'COMPRA',
+      plano: pKey,
+      quantidade: qtd,
+      saldoAnterior,
+      saldoNovo,
+      valor: options.valor !== undefined ? Number(options.valor) : 0,
+      pagamentoId: options.pagamentoId || null,
+      clienteId: options.clienteId || null,
+      clienteUsername: options.clienteUsername || null,
+      descricao: options.descricao || `Adição de ${qtd} créditos (${pKey})`,
+      createdAt: new Date().toISOString()
+    };
+
+    if (!this.data.resellerTransactions) this.data.resellerTransactions = [];
+    this.data.resellerTransactions.unshift(tx);
+
+    this.saveLocal();
+    this.pgInsertUser(reseller);
+    this.pgInsertResellerTransaction(tx);
+
+    return { reseller, tx, saldoNovo };
+  }
+
+  consumeResellerCredits(resellerId, plano, quantidade, options = {}) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) throw new Error('Revendedor não encontrado.');
+
+    const pKey = String(plano).toLowerCase().trim();
+    const qtd = parseInt(quantidade, 10);
+    if (isNaN(qtd) || qtd <= 0) throw new Error('Quantidade de créditos inválida.');
+
+    const fieldMap = {
+      mensal: 'creditosMensal',
+      trimestral: 'creditosTrimestral',
+      semestral: 'creditosSemestral',
+      anual: 'creditosAnual'
+    };
+
+    const field = fieldMap[pKey];
+    if (!field) throw new Error(`Tipo de plano inválido: ${plano}`);
+
+    const saldoAnterior = Number(reseller[field]) || 0;
+    if (saldoAnterior < qtd) {
+      throw new Error(`Saldo insuficiente de créditos ${pKey}. Disponível: ${saldoAnterior}, Necessário: ${qtd}. Faça uma recarga.`);
+    }
+
+    const saldoNovo = saldoAnterior - qtd;
+    reseller[field] = saldoNovo;
+
+    const tx = {
+      id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      resellerId: reseller.id,
+      tipo: options.tipo || 'CONSUMO_CLIENTE',
+      plano: pKey,
+      quantidade: -qtd,
+      saldoAnterior,
+      saldoNovo,
+      valor: 0,
+      pagamentoId: null,
+      clienteId: options.clienteId || null,
+      clienteUsername: options.clienteUsername || null,
+      descricao: options.descricao || `Liberação de ${qtd} tela(s) no plano ${pKey} para @${options.clienteUsername || ''}`,
+      createdAt: new Date().toISOString()
+    };
+
+    if (!this.data.resellerTransactions) this.data.resellerTransactions = [];
+    this.data.resellerTransactions.unshift(tx);
+
+    this.saveLocal();
+    this.pgInsertUser(reseller);
+    this.pgInsertResellerTransaction(tx);
+
+    return { reseller, tx, saldoNovo };
+  }
+
+  createClientByReseller(resellerId, clientData) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) throw new Error('Revendedor não encontrado.');
+
+    const { username, senhaHash, planoKey = 'mensal', telas = 1, nome, telefone, email } = clientData;
+    const cleanUsername = String(username || '').trim().replace(/\s+/g, '').toLowerCase();
+
+    if (!cleanUsername) throw new Error('O nome de usuário do cliente é obrigatório.');
+    if (cleanUsername.length < 3) throw new Error('O nome de usuário deve conter no mínimo 3 caracteres.');
+
+    const existing = this.findUserByUsername(cleanUsername);
+    if (existing) {
+      throw new Error(`O usuário @${cleanUsername} já está cadastrado no sistema. Escolha outro.`);
+    }
+
+    const screenCount = Math.max(1, parseInt(telas, 10) || 1);
+    const pKey = String(planoKey).toLowerCase().trim();
+
+    const planDurations = {
+      mensal: 30,
+      trimestral: 90,
+      semestral: 180,
+      anual: 365
+    };
+
+    const planNames = {
+      mensal: 'Mensal (30 dias)',
+      trimestral: 'Trimestral (90 dias)',
+      semestral: 'Semestral (180 dias)',
+      anual: 'Anual (365 dias)'
+    };
+
+    const duracaoDias = planDurations[pKey] || 30;
+    const planoNome = planNames[pKey] || 'Mensal';
+
+    // 1. Debita créditos do revendedor (1 crédito por tela)
+    const { saldoNovo, tx } = this.consumeResellerCredits(resellerId, pKey, screenCount, {
+      clienteUsername: cleanUsername,
+      descricao: `Criação de cliente @${cleanUsername} (${planoNome}, ${screenCount} tela(s))`
+    });
+
+    // 2. Calcula data de expiração (agora + vigência)
+    const now = new Date();
+    const fimAssinatura = new Date(now.getTime() + (duracaoDias * 24 * 60 * 60 * 1000));
+
+    const newClient = {
+      id: 'usr_cli_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      username: cleanUsername,
+      nome: nome ? String(nome).trim() : cleanUsername,
+      telefone: telefone ? String(telefone).trim() : '',
+      email: email ? email.trim().toLowerCase() : `${cleanUsername}@cliente.topcanais.tv`,
+      senhaHash,
+      cpf: '',
+      role: 'user',
+      resellerId: reseller.id,
+      createdAt: now.toISOString(),
+      assinaturaAtiva: true,
+      planoId: `revenda-${pKey}-${screenCount}telas`,
+      planoNome: `${planoNome} (${screenCount} ${screenCount > 1 ? 'Telas' : 'Tela'})`,
+      limiteTelas: screenCount,
+      dataAssinatura: now.toISOString(),
+      fimAssinatura: fimAssinatura.toISOString(),
+      trialUsed: true,
+      trialIp: null,
+      registrationIp: null
+    };
+
+    // Atualiza o ID do cliente na transação de débito
+    tx.clienteId = newClient.id;
+
+    this.data.users.push(newClient);
+    this.saveLocal();
+    this.pgInsertUser(newClient);
+
+    return { client: newClient, saldoRestante: saldoNovo, tx };
+  }
+
+  renewClientByReseller(resellerId, clientId, options = {}) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) throw new Error('Revendedor não encontrado.');
+
+    const client = this.findUserById(clientId);
+    if (!client) throw new Error('Cliente não encontrado.');
+
+    const isMaster = (reseller.username || '').toLowerCase() === 'odonel' || reseller.role === 'admin';
+    if (!isMaster && client.resellerId !== reseller.id) {
+      throw new Error('Acesso negado: este cliente pertence a outro revendedor.');
+    }
+
+    const { planoKey = 'mensal', telas = 1 } = options;
+    const screenCount = Math.max(1, parseInt(telas, 10) || client.limiteTelas || 1);
+    const pKey = String(planoKey).toLowerCase().trim();
+
+    const planDurations = {
+      mensal: 30,
+      trimestral: 90,
+      semestral: 180,
+      anual: 365
+    };
+
+    const planNames = {
+      mensal: 'Mensal (30 dias)',
+      trimestral: 'Trimestral (90 dias)',
+      semestral: 'Semestral (180 dias)',
+      anual: 'Anual (365 dias)'
+    };
+
+    const duracaoDias = planDurations[pKey] || 30;
+    const planoNome = planNames[pKey] || 'Mensal';
+
+    // 1. Debita créditos do revendedor
+    const { saldoNovo, tx } = this.consumeResellerCredits(resellerId, pKey, screenCount, {
+      clienteId: client.id,
+      clienteUsername: client.username,
+      tipo: 'RENOVACAO_CLIENTE',
+      descricao: `Renovação de assinatura de @${client.username} (${planoNome}, ${screenCount} tela(s))`
+    });
+
+    // 2. Se assinatura ainda estiver ativa, soma ao vencimento atual; caso contrário, conta a partir de agora
+    const now = new Date();
+    const currentEnd = client.fimAssinatura ? new Date(client.fimAssinatura) : null;
+    const baseDate = (client.assinaturaAtiva && currentEnd && currentEnd > now) ? currentEnd : now;
+    const novoFim = new Date(baseDate.getTime() + (duracaoDias * 24 * 60 * 60 * 1000));
+
+    client.assinaturaAtiva = true;
+    client.planoId = `revenda-${pKey}-${screenCount}telas`;
+    client.planoNome = `${planoNome} (${screenCount} ${screenCount > 1 ? 'Telas' : 'Tela'})`;
+    client.limiteTelas = screenCount;
+    client.fimAssinatura = novoFim.toISOString();
+    if (!client.dataAssinatura) client.dataAssinatura = now.toISOString();
+
+    this.saveLocal();
+    this.pgInsertUser(client);
+
+    return { client, saldoRestante: saldoNovo, tx };
+  }
+
+  getClientsByReseller(resellerId) {
+    const now = Date.now();
+    const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+    return this.data.users
+      .filter(u => u.resellerId === resellerId)
+      .map(u => {
+        const end = u.fimAssinatura ? new Date(u.fimAssinatura).getTime() : null;
+        const isSubActive = u.assinaturaAtiva && (!end || end > now);
+
+        // Sessões ativas
+        const userSessions = (this.data.sessions || [])
+          .filter(s => s.userId === u.id && s.isActive)
+          .map(s => {
+            const hb = new Date(s.lastHeartbeat || s.createdAt).getTime();
+            return {
+              id: s.id,
+              deviceInfo: s.deviceInfo,
+              isOnline: (now - hb) <= ONLINE_THRESHOLD_MS
+            };
+          });
+
+        const isOnline = userSessions.some(s => s.isOnline);
+
+        let status = 'inativo';
+        let expiresInText = 'Sem plano ativo';
+        let daysRemaining = 0;
+
+        if (isSubActive && end) {
+          const diffMs = end - now;
+          daysRemaining = Math.max(0, Math.floor(diffMs / (24 * 3600 * 1000)));
+          const hours = Math.floor((diffMs % (24 * 3600 * 1000)) / 3600000);
+
+          if (daysRemaining > 5) {
+            status = 'ativo';
+            expiresInText = `Vence em ${daysRemaining} dias (${new Date(end).toLocaleDateString('pt-BR')})`;
+          } else if (daysRemaining >= 1) {
+            status = 'vencendo';
+            expiresInText = `⚠️ Vence em ${daysRemaining}d ${hours}h`;
+          } else {
+            status = 'vencendo';
+            expiresInText = `⚠️ Vence hoje em ${hours}h`;
+          }
+        } else if (end && now >= end) {
+          status = 'expirado';
+          expiresInText = `Expirou em ${new Date(end).toLocaleDateString('pt-BR')}`;
+        }
+
+        return {
+          id: u.id,
+          username: u.username,
+          nome: u.nome,
+          telefone: u.telefone,
+          email: u.email,
+          createdAt: u.createdAt,
+          assinaturaAtiva: isSubActive,
+          planoId: u.planoId,
+          planoNome: u.planoNome,
+          limiteTelas: u.limiteTelas || 1,
+          dataAssinatura: u.dataAssinatura,
+          fimAssinatura: u.fimAssinatura,
+          resellerId: u.resellerId,
+          isOnline,
+          status,
+          expiresInText,
+          daysRemaining,
+          activeSessionsCount: userSessions.length
+        };
+      });
+  }
+
+  getResellerTransactions(resellerId, limit = 100) {
+    return (this.data.resellerTransactions || [])
+      .filter(tx => tx.resellerId === resellerId)
+      .slice(0, limit);
+  }
+
+  getResellerOrders(resellerId, limit = 50) {
+    return (this.data.resellerOrders || [])
+      .filter(o => o.resellerId === resellerId)
+      .slice(0, limit);
+  }
+
+  createResellerOrder(orderData) {
+    const newOrder = {
+      id: 'ord_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      resellerId: orderData.resellerId,
+      plano: orderData.plano,
+      quantidade: parseInt(orderData.quantidade, 10),
+      valorUnitario: Number(orderData.valorUnitario),
+      valorTotal: Number(orderData.valorTotal),
+      mercadoPagoId: orderData.mercadoPagoId ? String(orderData.mercadoPagoId) : null,
+      qrCode: orderData.qrCode || '',
+      qrCodeBase64: orderData.qrCodeBase64 || '',
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+      approvedAt: null
+    };
+
+    if (!this.data.resellerOrders) this.data.resellerOrders = [];
+    this.data.resellerOrders.unshift(newOrder);
+
+    this.saveLocal();
+    this.pgInsertResellerOrder(newOrder);
+    return newOrder;
+  }
+
+  findResellerOrderById(id) {
+    return (this.data.resellerOrders || []).find(o => o.id === id) || null;
+  }
+
+  findResellerOrderByMpId(mpId) {
+    if (!mpId) return null;
+    return (this.data.resellerOrders || []).find(o => o.mercadoPagoId === String(mpId)) || null;
+  }
+
+  updateResellerOrder(id, updates) {
+    const order = this.findResellerOrderById(id);
+    if (!order) return null;
+    Object.assign(order, updates);
+    this.saveLocal();
+    this.pgInsertResellerOrder(order);
+    return order;
+  }
+
+  approveResellerOrder(orderId) {
+    const order = this.findResellerOrderById(orderId) || this.findResellerOrderByMpId(orderId);
+    if (!order) throw new Error('Pedido não encontrado.');
+    if (order.status === 'APPROVED') {
+      return { order, alreadyApproved: true };
+    }
+
+    order.status = 'APPROVED';
+    order.approvedAt = new Date().toISOString();
+
+    // Incrementa os créditos na carteira do revendedor
+    const result = this.addResellerCredits(order.resellerId, order.plano, order.quantidade, {
+      tipo: 'COMPRA',
+      valor: order.valorTotal,
+      pagamentoId: order.id,
+      descricao: `Compra aprovada: ${order.quantidade} créditos (${order.plano}) - Total R$ ${order.valorTotal.toFixed(2)}`
+    });
+
+    this.saveLocal();
+    this.pgInsertResellerOrder(order);
+
+    return { order, result };
+  }
+
+  // --- Métodos de Gestão Master de Revendedores ---
+
+  getAllResellers() {
+    return this.data.users
+      .filter(u => u.role === 'reseller')
+      .map(r => {
+        const clients = (this.data.users || []).filter(u => u.resellerId === r.id);
+        const activeClients = clients.filter(c => c.assinaturaAtiva && (!c.fimAssinatura || new Date(c.fimAssinatura) > new Date()));
+
+        const orders = (this.data.resellerOrders || []).filter(o => o.resellerId === r.id && o.status === 'APPROVED');
+        const totalSpent = orders.reduce((sum, o) => sum + (Number(o.valorTotal) || 0), 0);
+
+        return {
+          id: r.id,
+          username: r.username,
+          nome: r.nome,
+          telefone: r.telefone,
+          email: r.email,
+          cpf: r.cpf,
+          status: r.status || 'ativo',
+          createdAt: r.createdAt,
+          creditos: {
+            mensal: Number(r.creditosMensal) || 0,
+            trimestral: Number(r.creditosTrimestral) || 0,
+            semestral: Number(r.creditosSemestral) || 0,
+            anual: Number(r.creditosAnual) || 0
+          },
+          totalClients: clients.length,
+          activeClients: activeClients.length,
+          totalSpent
+        };
+      });
+  }
+
+  getAllResellerClients(filterResellerId = null) {
+    let clients = (this.data.users || []).filter(u => u.resellerId);
+    if (filterResellerId) {
+      clients = clients.filter(u => u.resellerId === filterResellerId);
+    }
+
+    const now = Date.now();
+    return clients.map(u => {
+      const reseller = this.findUserById(u.resellerId);
+      const end = u.fimAssinatura ? new Date(u.fimAssinatura).getTime() : null;
+      const isSubActive = u.assinaturaAtiva && (!end || end > now);
+
+      return {
+        id: u.id,
+        username: u.username,
+        nome: u.nome,
+        telefone: u.telefone,
+        email: u.email,
+        createdAt: u.createdAt,
+        assinaturaAtiva: isSubActive,
+        planoId: u.planoId,
+        planoNome: u.planoNome,
+        limiteTelas: u.limiteTelas || 1,
+        fimAssinatura: u.fimAssinatura,
+        resellerId: u.resellerId,
+        resellerNome: reseller ? (reseller.nome || reseller.username) : 'Desconhecido',
+        resellerTelefone: reseller ? reseller.telefone : ''
+      };
+    });
+  }
+
+  adjustResellerCredits(resellerId, options = {}) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) throw new Error('Revendedor não encontrado.');
+
+    const { plano, delta, motivo = 'Ajuste manual efetuado pelo Master Odonel', masterUsername = 'odonel' } = options;
+    const pKey = String(plano).toLowerCase().trim();
+    const d = parseInt(delta, 10);
+    if (isNaN(d) || d === 0) throw new Error('Informe um valor de alteração de créditos diferente de zero.');
+
+    const fieldMap = {
+      mensal: 'creditosMensal',
+      trimestral: 'creditosTrimestral',
+      semestral: 'creditosSemestral',
+      anual: 'creditosAnual'
+    };
+
+    const field = fieldMap[pKey];
+    if (!field) throw new Error(`Tipo de plano inválido: ${plano}`);
+
+    const saldoAnterior = Number(reseller[field]) || 0;
+    const saldoNovo = Math.max(0, saldoAnterior + d);
+    reseller[field] = saldoNovo;
+
+    const tx = {
+      id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      resellerId: reseller.id,
+      tipo: d >= 0 ? 'AJUSTE_MASTER_CREDITO' : 'AJUSTE_MASTER_DEBITO',
+      plano: pKey,
+      quantidade: d,
+      saldoAnterior,
+      saldoNovo,
+      valor: 0,
+      pagamentoId: null,
+      clienteId: null,
+      clienteUsername: null,
+      descricao: `[Master @${masterUsername}] ${motivo} (${d > 0 ? '+' : ''}${d} ${pKey})`,
+      createdAt: new Date().toISOString()
+    };
+
+    if (!this.data.resellerTransactions) this.data.resellerTransactions = [];
+    this.data.resellerTransactions.unshift(tx);
+
+    this.saveLocal();
+    this.pgInsertUser(reseller);
+    this.pgInsertResellerTransaction(tx);
+
+    return { reseller, tx, saldoNovo };
+  }
+
+  updateResellerStatus(resellerId, status) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) throw new Error('Revendedor não encontrado.');
+
+    reseller.status = status; // 'ativo' | 'bloqueado' | 'inativo'
+
+    if (status === 'bloqueado') {
+      this.terminateUserSessions(resellerId, 'Sua conta de revendedor foi bloqueada pelo administrador Master.');
+    }
+
+    this.saveLocal();
+    this.pgInsertUser(reseller);
+    return reseller;
+  }
+
+  deleteReseller(resellerId) {
+    const idx = (this.data.users || []).findIndex(u => u.id === resellerId);
+    if (idx === -1) throw new Error('Revendedor não encontrado.');
+
+    const [deleted] = this.data.users.splice(idx, 1);
+    this.terminateUserSessions(resellerId, 'Conta de revendedor removida.');
+
+    this.saveLocal();
+    if (this.pool) {
+      this.pool.query('DELETE FROM users WHERE id = $1;', [resellerId]).catch(() => {});
+    }
+    return deleted;
+  }
+
+  getAllResellerTransactions(limit = 300) {
+    return (this.data.resellerTransactions || []).slice(0, limit);
+  }
+
+  getAllResellerOrders(limit = 200) {
+    return (this.data.resellerOrders || []).slice(0, limit);
   }
 }
 

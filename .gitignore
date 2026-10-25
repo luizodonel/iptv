@@ -5,3 +5,4 @@ data/database.json
 data/*.tmp
 *.log
 .env
+scratch/

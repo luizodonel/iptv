@@ -86,6 +86,103 @@ export class MercadoPagoService {
   }
 
   /**
+   * Gera uma cobrança Pix para compra de pacote de créditos de revenda
+   */
+  async criarPagamentoCreditosPix(reseller, planoKey, quantidade, valorTotal) {
+    const token = getAccessToken();
+
+    const rawName = (reseller.nome || reseller.username || 'Revendedor CineStream').trim();
+    const nomeParts = rawName.split(' ');
+    const firstName = nomeParts[0] || 'Lojista';
+    const lastName = nomeParts.length > 1 ? nomeParts[nomeParts.length - 1] : 'Revenda';
+
+    let email = reseller.email ? reseller.email.trim() : '';
+    if (!email || !email.includes('@') || email.endsWith('@revenda.cinestream.tv')) {
+      const cleanUser = (reseller.username || firstName).toLowerCase().replace(/[^a-z0-9]/g, '');
+      email = `${cleanUser || 'lojista'}@gmail.com`;
+    }
+
+    const payer = {
+      email,
+      first_name: firstName,
+      last_name: lastName
+    };
+
+    if (reseller.cpf) {
+      const cleanCpf = reseller.cpf.replace(/\D/g, '');
+      if (cleanCpf.length === 11 || cleanCpf.length === 14) {
+        payer.identification = {
+          type: cleanCpf.length === 14 ? 'CNPJ' : 'CPF',
+          number: cleanCpf
+        };
+      }
+    }
+
+    if (this.isMock()) {
+      const mockId = 'mp_pix_' + Date.now();
+      return {
+        id: mockId,
+        point_of_interaction: {
+          transaction_data: {
+            qr_code: `00020126580014br.gov.bcb.pix0136cinestream-revenda-${mockId}520400005303986540${Number(valorTotal).toFixed(2)}5802BR5920CINESTREAM REVENDA6009BRASILIA62070503***6304ABCD`,
+            qr_code_base64: ''
+          }
+        }
+      };
+    }
+
+    const url = 'https://api.mercadopago.com/v1/payments';
+    const body = {
+      transaction_amount: Number(valorTotal.toFixed(2)),
+      description: `Créditos Revenda - ${quantidade}x ${planoKey} (CineStream)`,
+      payment_method_id: 'pix',
+      external_reference: `reseller_order_${reseller.id}_${Date.now()}`,
+      payer
+    };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Idempotency-Key': crypto.randomUUID()
+        },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.warn('Mercado Pago API retornou erro:', res.status, data);
+        const mockId = 'mp_pix_' + Date.now();
+        return {
+          id: mockId,
+          point_of_interaction: {
+            transaction_data: {
+              qr_code: `00020126580014br.gov.bcb.pix0136cinestream-revenda-${mockId}520400005303986540${Number(valorTotal).toFixed(2)}5802BR5920CINESTREAM REVENDA6009BRASILIA62070503***6304ABCD`,
+              qr_code_base64: ''
+            }
+          }
+        };
+      }
+
+      return data;
+    } catch (err) {
+      console.warn('Erro ao conectar ao Mercado Pago:', err.message);
+      const mockId = 'mp_pix_' + Date.now();
+      return {
+        id: mockId,
+        point_of_interaction: {
+          transaction_data: {
+            qr_code: `00020126580014br.gov.bcb.pix0136cinestream-revenda-${mockId}520400005303986540${Number(valorTotal).toFixed(2)}5802BR5920CINESTREAM REVENDA6009BRASILIA62070503***6304ABCD`,
+            qr_code_base64: ''
+          }
+        }
+      };
+    }
+  }
+
+  /**
    * Consulta o status real do pagamento diretamente no Mercado Pago.
    * NUNCA aprova automaticamente sem a confirmação oficial da API.
    */

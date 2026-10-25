@@ -119,6 +119,122 @@ export function isUserSubscriptionActive(user) {
   return now < end;
 }
 
+export const RESELLER_PLANS = {
+  mensal: {
+    id: 'mensal',
+    nome: 'Mensal',
+    duracaoDias: 30,
+    preco: 12.50,
+    descricao: '1 crédito = 1 tela por 30 dias'
+  },
+  trimestral: {
+    id: 'trimestral',
+    nome: 'Trimestral',
+    duracaoDias: 90,
+    preco: 32.50,
+    descricao: '1 crédito = 1 tela por 90 dias (3 meses)'
+  },
+  semestral: {
+    id: 'semestral',
+    nome: 'Semestral',
+    duracaoDias: 180,
+    preco: 60.00,
+    descricao: '1 crédito = 1 tela por 180 dias (6 meses)'
+  },
+  anual: {
+    id: 'anual',
+    nome: 'Anual',
+    duracaoDias: 365,
+    preco: 110.00,
+    descricao: '1 crédito = 1 tela por 365 dias (1 ano)'
+  }
+};
+
+/**
+ * Validação de CPF com cálculo oficial de dígitos verificadores
+ */
+export function isValidCpf(cpf) {
+  const clean = String(cpf || '').replace(/\D/g, '');
+  if (clean.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(clean)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(clean.charAt(i), 10) * (10 - i);
+  }
+  let rev = 11 - (sum % 11);
+  if (rev === 10 || rev === 11) rev = 0;
+  if (rev !== parseInt(clean.charAt(9), 10)) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(clean.charAt(i), 10) * (11 - i);
+  }
+  rev = 11 - (sum % 11);
+  if (rev === 10 || rev === 11) rev = 0;
+  if (rev !== parseInt(clean.charAt(10), 10)) return false;
+
+  return true;
+}
+
+/**
+ * Validação de CNPJ com cálculo oficial de dígitos verificadores
+ */
+export function isValidCnpj(cnpj) {
+  const clean = String(cnpj || '').replace(/\D/g, '');
+  if (clean.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(clean)) return false;
+
+  let size = clean.length - 2;
+  let numbers = clean.substring(0, size);
+  let digits = clean.substring(size);
+  let sum = 0;
+  let pos = size - 7;
+  for (let i = size; i >= 1; i--) {
+    sum += parseInt(numbers.charAt(size - i), 10) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  let result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+  if (result !== parseInt(digits.charAt(0), 10)) return false;
+
+  size = size + 1;
+  numbers = clean.substring(0, size);
+  sum = 0;
+  pos = size - 7;
+  for (let i = size; i >= 1; i--) {
+    sum += parseInt(numbers.charAt(size - i), 10) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+  if (result !== parseInt(digits.charAt(1), 10)) return false;
+
+  return true;
+}
+
+/**
+ * Valida se é um CPF (11 dígitos) ou CNPJ (14 dígitos) válido
+ */
+export function isValidCpfOrCnpj(val) {
+  const clean = String(val || '').replace(/\D/g, '');
+  if (clean.length === 11) return isValidCpf(clean);
+  if (clean.length === 14) return isValidCnpj(clean);
+  return false;
+}
+
+/**
+ * Formata CPF ou CNPJ com pontuação padrão
+ */
+export function formatCpfCnpj(val) {
+  const clean = String(val || '').replace(/\D/g, '');
+  if (clean.length === 11) {
+    return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  }
+  if (clean.length === 14) {
+    return clean.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+  return val;
+}
+
 /**
  * Sanitiza o objeto de usuário removendo dados confidenciais
  */
@@ -135,9 +251,23 @@ export function sanitizeUser(user) {
     safe.planoId = safe.planoId || 'vitalicio';
     safe.planoNome = safe.planoNome || '👑 Master Vitalício';
     safe.limiteTelas = 999;
+  } else if (user.role === 'reseller') {
+    safe.isMaster = false;
+    safe.isReseller = true;
+    safe.role = 'reseller';
+    safe.status = user.status || 'ativo';
+    safe.assinaturaAtiva = true;
+    safe.creditos = {
+      mensal: Number(user.creditosMensal) || 0,
+      trimestral: Number(user.creditosTrimestral) || 0,
+      semestral: Number(user.creditosSemestral) || 0,
+      anual: Number(user.creditosAnual) || 0
+    };
   } else {
     safe.isMaster = false;
+    safe.isReseller = false;
     safe.role = user.role || 'user';
+    safe.resellerId = user.resellerId || null;
     safe.assinaturaAtiva = isUserSubscriptionActive(user);
 
     if (user.planoId === 'teste-2h') {

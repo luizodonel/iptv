@@ -35,7 +35,8 @@ import {
   EyeOff,
   Copy,
   Check,
-  Sparkles
+  Sparkles,
+  Briefcase
 } from 'lucide-react';
 
 import {
@@ -48,6 +49,7 @@ import {
 } from '../services/authService';
 
 import { isMasterUser } from '../services/securityService';
+import MasterResellerTab from './reseller/MasterResellerTab';
 
 export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
   // Controle de abas: 'users' | 'online' | 'logs'
@@ -515,6 +517,16 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
           >
             <FileText size={18} />
             <span>Logs de Acesso ({logs.length})</span>
+          </button>
+
+          <button
+            type="button"
+            className={`master-tab-btn ${activeTab === 'resellers' ? 'active' : ''}`}
+            onClick={() => setActiveTab('resellers')}
+            style={{ borderColor: activeTab === 'resellers' ? '#f59e0b' : undefined, color: activeTab === 'resellers' ? '#f59e0b' : undefined }}
+          >
+            <Briefcase size={18} />
+            <span>Revenda / B2B</span>
           </button>
         </nav>
 
@@ -999,6 +1011,11 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
               )}
             </div>
           </div>
+        )}
+
+        {/* ==================== ABA 4: MÓDULO DE REVENDA / B2B ==================== */}
+        {activeTab === 'resellers' && (
+          <MasterResellerTab onShowToast={showToast} />
         )}
 
         {/* ==================== MODAL / BOTTOM SHEET: DEFINIR PERÍODO ==================== */}

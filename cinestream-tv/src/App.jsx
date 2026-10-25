@@ -17,6 +17,7 @@ import SessionTerminatedModal from './components/SessionTerminatedModal';
 import SupportModal from './components/SupportModal';
 import SupportFloatingButton from './components/SupportFloatingButton';
 import MasterPanelModal from './components/MasterPanelModal';
+import ResellerPortal from './components/reseller/ResellerPortal';
 
 import { getAuthUser, logoutUser, checkHeartbeat } from './services/authService';
 import { updateSecurityUser } from './services/securityService';
@@ -68,6 +69,35 @@ export default function App() {
   const [sessionKickedReason, setSessionKickedReason] = useState('');
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [masterPanelOpen, setMasterPanelOpen] = useState(false);
+
+  // Módulo de Revenda / B2B Routing
+  const [isResellerRoute, setIsResellerRoute] = useState(() => {
+    return typeof window !== 'undefined' && window.location.pathname.startsWith('/revenda');
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setIsResellerRoute(window.location.pathname.startsWith('/revenda'));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateToReseller = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      if (!window.location.pathname.startsWith('/revenda')) {
+        window.history.pushState({}, '', '/revenda');
+      }
+      setIsResellerRoute(true);
+    }
+  }, []);
+
+  const navigateToTv = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/');
+      setIsResellerRoute(false);
+    }
+  }, []);
 
   // Channels state
   const [channels, setChannels] = useState([]);
@@ -378,6 +408,10 @@ export default function App() {
     return matchesCat && matchesSearch;
   });
 
+  if (isResellerRoute) {
+    return <ResellerPortal onNavigateToTv={navigateToTv} />;
+  }
+
   return (
     <div className="app-container">
       {/* Top Navbar */}
@@ -394,6 +428,7 @@ export default function App() {
         onOpenPlans={() => setPlansModalOpen(true)}
         onOpenSupport={() => setSupportModalOpen(true)}
         onOpenMasterPanel={() => setMasterPanelOpen(true)}
+        onOpenReseller={navigateToReseller}
         onLogout={logoutUser}
       />
 

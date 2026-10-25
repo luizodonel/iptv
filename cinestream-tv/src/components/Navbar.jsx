@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   Layers,
   Sparkles,
-  Headset
+  Headset,
+  Briefcase
 } from 'lucide-react';
 
 export default function Navbar({
@@ -25,6 +26,7 @@ export default function Navbar({
   onOpenPlans,
   onOpenSupport,
   onOpenMasterPanel,
+  onOpenReseller,
   onLogout
 }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -51,6 +53,7 @@ export default function Navbar({
 
   const firstLetter = (currentUser?.username || currentUser?.nome || 'U').charAt(0).toUpperCase();
   const isMaster = (currentUser?.username || '').toLowerCase().trim() === 'odonel' || currentUser?.role === 'admin' || currentUser?.isMaster === true;
+  const isReseller = currentUser?.role === 'reseller';
 
   return (
     <>
@@ -112,6 +115,16 @@ export default function Navbar({
             >
               <Crown size={16} className="text-warning" />
               <span>Planos</span>
+            </button>
+
+            {/* Revenda B2B / Painel Lojista Button */}
+            <button
+              className="nav-reseller-btn"
+              onClick={onOpenReseller}
+              title={isReseller ? "Painel de Gestão do Lojista" : "Área de Revenda e Lojistas B2B"}
+            >
+              <Briefcase size={16} />
+              <span>{isReseller ? 'Painel Lojista' : 'Revenda B2B'}</span>
             </button>
 
             {/* Suporte WhatsApp Button */}
@@ -208,6 +221,18 @@ export default function Navbar({
                         <div className="dropdown-divider" />
                       </>
                     )}
+
+                    {/* Acesso ao Portal de Revenda no Dropdown */}
+                    <button
+                      className="dropdown-item"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        if (onOpenReseller) onOpenReseller();
+                      }}
+                    >
+                      <Briefcase size={16} style={{ color: '#60a5fa' }} />
+                      <span>{isReseller ? 'Painel do Lojista' : 'Área de Revenda (B2B)'}</span>
+                    </button>
 
                     <button
                       className="dropdown-item"
