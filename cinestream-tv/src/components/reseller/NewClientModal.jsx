@@ -391,7 +391,7 @@ export default function NewClientModal({
               <div>🔑 <strong>Senha:</strong> {createdResult.rawPassword}</div>
               <div>📺 <strong>Telas:</strong> {createdResult.client?.limiteTelas} tela(s) simultâneas</div>
               <div>🗓️ <strong>Vencimento:</strong> {new Date(createdResult.client?.fimAssinatura).toLocaleDateString('pt-BR')}</div>
-              <div>🌐 <strong>Portal:</strong> https://topcanais.tv</div>
+              <div>🌐 <strong>Portal:</strong> {createdResult.accessUrl || 'https://topcanais.tv'}</div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

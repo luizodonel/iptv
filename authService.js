@@ -263,6 +263,8 @@ export function sanitizeUser(user) {
       semestral: Number(user.creditosSemestral) || 0,
       anual: Number(user.creditosAnual) || 0
     };
+    safe.linkExclusivo = user.linkExclusivo || '';
+    safe.nomeLoja = user.nomeLoja || '';
   } else {
     safe.isMaster = false;
     safe.isReseller = false;

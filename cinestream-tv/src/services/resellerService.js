@@ -176,6 +176,17 @@ export async function getResellerMe() {
   return data;
 }
 
+export async function updateResellerProfile(payload) {
+  const res = await fetch('/api/reseller/profile', {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações do lojista.');
+  return data;
+}
+
 export async function buyResellerCredits(plano, quantidade) {
   const res = await fetch('/api/reseller/credits/buy', {
     method: 'POST',

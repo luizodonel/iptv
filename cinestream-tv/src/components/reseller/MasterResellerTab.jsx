@@ -25,7 +25,8 @@ import {
   DollarSign,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 import {
   RESELLER_PLANS,
@@ -414,8 +415,36 @@ export default function MasterResellerTab({ onShowToast }) {
                               {(r.nome || r.username).charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <div className="reseller-user-name">{r.nome || `@${r.username}`}</div>
+                              <div className="reseller-user-name">
+                                {r.nome || `@${r.username}`}
+                                {r.nomeLoja && (
+                                  <span style={{ fontSize: '0.72rem', color: '#f59e0b', marginLeft: '6px', fontWeight: 'normal' }}>
+                                    • {r.nomeLoja}
+                                  </span>
+                                )}
+                              </div>
                               <div className="reseller-user-sub">@{r.username}</div>
+                              {r.linkExclusivo && (
+                                <a
+                                  href={r.linkExclusivo}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '0.72rem',
+                                    color: '#60a5fa',
+                                    textDecoration: 'none',
+                                    marginTop: '2px',
+                                    wordBreak: 'break-all'
+                                  }}
+                                  title="Link Exclusivo do Lojista"
+                                >
+                                  <Globe size={11} />
+                                  <span>{r.linkExclusivo.replace(/^https?:\/\//, '')}</span>
+                                </a>
+                              )}
                             </div>
                           </div>
                         </td>

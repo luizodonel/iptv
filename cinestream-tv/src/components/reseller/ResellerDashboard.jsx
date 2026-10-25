@@ -22,7 +22,8 @@ import {
   Smartphone,
   ChevronRight,
   TrendingUp,
-  ShieldCheck
+  ShieldCheck,
+  Globe
 } from 'lucide-react';
 import {
   RESELLER_PLANS,
@@ -32,6 +33,7 @@ import {
   getResellerOrders,
   resetResellerClientPassword,
   kickResellerClient,
+  updateResellerProfile,
   formatCpfCnpj,
   formatPhone
 } from '../../services/resellerService';
@@ -67,6 +69,14 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [copiedClientId, setCopiedClientId] = useState(null);
 
+  // Link Exclusivo & Domínio Próprio do Lojista
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [customLinkInput, setCustomLinkInput] = useState(currentUser?.linkExclusivo || '');
+  const [nomeLojaInput, setNomeLojaInput] = useState(currentUser?.nomeLoja || '');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
+
   // Carrega todos os dados do revendedor
   const loadDashboardData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -83,6 +93,8 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
       if (meRes?.reseller) {
         setReseller(meRes.reseller);
         setCredits(meRes.credits || meRes.reseller.creditos);
+        if (meRes.reseller.linkExclusivo) setCustomLinkInput(meRes.reseller.linkExclusivo);
+        if (meRes.reseller.nomeLoja) setNomeLojaInput(meRes.reseller.nomeLoja);
       }
       setClients(clientsRes);
       setTransactions(txRes);
@@ -156,11 +168,13 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
   };
 
   const handleCopyAccess = (client) => {
-    const text = `🌟 *SEU ACESSO CINESTREAM ESTÁ ATIVO!* 🌟\n\n` +
+    const accessUrl = reseller?.linkExclusivo || 'https://topcanais.tv';
+    const storeName = reseller?.nomeLoja || reseller?.nome || 'CineStream';
+    const text = `🌟 *SEU ACESSO ${storeName.toUpperCase()} ESTÁ ATIVO!* 🌟\n\n` +
       `👤 *Usuário:* ${client.username}\n` +
       `📺 *Telas Simultâneas:* ${client.limiteTelas} tela(s)\n` +
       `🗓️ *Validade:* ${new Date(client.fimAssinatura).toLocaleDateString('pt-BR')}\n\n` +
-      `🌐 *Acesse agora:* https://topcanais.tv\n\n` +
+      `🌐 *Acesse agora:* ${accessUrl}\n\n` +
       `Dúvidas ou renovações, estamos à disposição!`;
 
     navigator.clipboard.writeText(text);
@@ -168,11 +182,39 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
     setTimeout(() => setCopiedClientId(null), 2500);
   };
 
+  const handleSaveProfile = async (e) => {
+    if (e) e.preventDefault();
+    setSavingProfile(true);
+    setProfileSuccessMsg(null);
+    try {
+      const res = await updateResellerProfile({
+        linkExclusivo: customLinkInput,
+        nomeLoja: nomeLojaInput
+      });
+      setProfileSuccessMsg('Link exclusivo e dados da loja atualizados com sucesso!');
+      if (res.reseller) {
+        setReseller(prev => ({
+          ...prev,
+          linkExclusivo: res.reseller.linkExclusivo,
+          nomeLoja: res.reseller.nomeLoja
+        }));
+      }
+      setTimeout(() => {
+        setLinkModalOpen(false);
+        setProfileSuccessMsg(null);
+      }, 1500);
+    } catch (err) {
+      alert(err.message || 'Erro ao atualizar dados do revendedor.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   return (
     <div className="reseller-portal-container">
       {/* Top Header */}
       <header className="reseller-topbar">
-        <div className="reseller-logo" onClick={onNavigateToTv}>
+        <div className="reseller-logo">
           <span className="reseller-logo-badge">B2B</span>
           <span className="reseller-logo-text">
             CineStream <span style={{ color: '#f59e0b' }}>Revenda</span>
@@ -239,6 +281,16 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
 
           <div className="reseller-banner-actions">
             <button
+              className="reseller-action-btn"
+              style={{ padding: '0.75rem 1.25rem', background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', borderColor: 'rgba(59, 130, 246, 0.4)' }}
+              onClick={() => setLinkModalOpen(true)}
+              title="Cadastrar ou alterar meu link exclusivo / domínio próprio"
+            >
+              <Globe size={18} />
+              <span>{reseller?.linkExclusivo ? 'Meu Link Exclusivo' : 'Configurar Link'}</span>
+            </button>
+
+            <button
               className="reseller-btn-primary"
               style={{ marginTop: 0, padding: '0.75rem 1.25rem' }}
               onClick={() => setNewClientModalOpen(true)}
@@ -254,6 +306,94 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
             >
               <CreditCard size={18} />
               <span>Comprar Créditos</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card Informativo do Link Exclusivo Configurado */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 58, 138, 0.22) 100%)',
+          border: '1px solid rgba(59, 130, 246, 0.3)',
+          borderRadius: '14px',
+          padding: '14px 20px',
+          marginBottom: '1.75rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+            }}>
+              <Globe size={22} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>
+                  Meu Link de Acesso Exclusivo (Domínio Próprio)
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '999px',
+                  fontWeight: 600,
+                  background: reseller?.linkExclusivo ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                  color: reseller?.linkExclusivo ? '#34d399' : '#fbbf24',
+                  border: `1px solid ${reseller?.linkExclusivo ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                }}>
+                  {reseller?.linkExclusivo ? 'Ativo' : 'Não configurado'}
+                </span>
+              </div>
+              <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>
+                {reseller?.linkExclusivo ? (
+                  <span>
+                    Endereço enviado aos clientes: <strong style={{ color: '#60a5fa' }}>{reseller.linkExclusivo}</strong>
+                    {reseller.nomeLoja && <span style={{ color: '#cbd5e1' }}> ({reseller.nomeLoja})</span>}
+                  </span>
+                ) : (
+                  <span>Cadastre seu link (ex: <em>https://linkdologista.logistadigital.com.br/</em>) para que seus clientes recebam o seu endereço personalizado.</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {reseller?.linkExclusivo && (
+              <button
+                type="button"
+                className="reseller-action-btn"
+                style={{ padding: '7px 14px', fontSize: '13px', color: '#a7f3d0', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.12)' }}
+                onClick={() => {
+                  navigator.clipboard.writeText(reseller.linkExclusivo);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2500);
+                }}
+                title="Copiar meu link exclusivo"
+              >
+                {copiedLink ? <Check size={14} style={{ marginRight: '6px' }} /> : <Copy size={14} style={{ marginRight: '6px' }} />}
+                <span>{copiedLink ? 'Copiado!' : 'Copiar Link'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="reseller-action-btn"
+              style={{ padding: '7px 14px', fontSize: '13px', color: '#bfdbfe', borderColor: 'rgba(59, 130, 246, 0.4)', background: 'rgba(59, 130, 246, 0.15)' }}
+              onClick={() => setLinkModalOpen(true)}
+            >
+              <Globe size={14} style={{ marginRight: '6px' }} />
+              <span>{reseller?.linkExclusivo ? 'Alterar Link' : 'Cadastrar Link'}</span>
             </button>
           </div>
         </div>
@@ -768,6 +908,121 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                   style={{ flex: 1, marginTop: 0 }}
                 >
                   Salvar Senha
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Configuração do Link Exclusivo / Domínio do Lojista */}
+      {linkModalOpen && (
+        <div className="reseller-modal-backdrop">
+          <div className="reseller-modal-card" style={{ maxWidth: '520px' }}>
+            <div className="reseller-modal-header">
+              <div className="reseller-modal-title">
+                <Globe size={22} style={{ color: '#3b82f6' }} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Cadastrar Link Exclusivo</h3>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8' }}>
+                    Personalize o domínio ou endereço que seus clientes acessarão
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="reseller-modal-close"
+                onClick={() => setLinkModalOpen(false)}
+              >
+                <Power size={18} style={{ transform: 'rotate(45deg)' }} />
+              </button>
+            </div>
+
+            {profileSuccessMsg && (
+              <div className="reseller-alert success" style={{ margin: '1rem 0 0 0' }}>
+                <CheckCircle2 size={16} />
+                <span>{profileSuccessMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} style={{ marginTop: '1rem' }}>
+              <div className="reseller-form-group">
+                <label className="reseller-label">
+                  <span>Link / Domínio Exclusivo do Lojista</span>
+                </label>
+                <div className="reseller-input-wrapper">
+                  <Globe size={18} className="reseller-input-icon" />
+                  <input
+                    type="text"
+                    className="reseller-input"
+                    placeholder="https://linkdologista.logistadigital.com.br/"
+                    value={customLinkInput}
+                    onChange={(e) => setCustomLinkInput(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>
+                  💡 Exemplo: <code>https://linkdologista.logistadigital.com.br/</code> ou <code>https://meusite.com/tv</code>
+                </span>
+              </div>
+
+              <div className="reseller-form-group">
+                <label className="reseller-label">
+                  <span>Nome da Loja / Marca (Opcional)</span>
+                </label>
+                <div className="reseller-input-wrapper">
+                  <Sparkles size={18} className="reseller-input-icon" />
+                  <input
+                    type="text"
+                    className="reseller-input"
+                    placeholder="Ex: Lojista Digital TV"
+                    value={nomeLojaInput}
+                    onChange={(e) => setNomeLojaInput(e.target.value)}
+                  />
+                </div>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>
+                  Aparecerá no cabeçalho dos acessos gerados para WhatsApp.
+                </span>
+              </div>
+
+              {/* Pré-visualização ao vivo da mensagem para o cliente */}
+              <div style={{
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginTop: '1rem',
+                fontSize: '0.8rem',
+                color: '#cbd5e1',
+                lineHeight: '1.4'
+              }}>
+                <div style={{ color: '#25D366', fontWeight: 'bold', marginBottom: '4px' }}>
+                  📲 Como seu cliente verá no WhatsApp:
+                </div>
+                <div>🌟 *SEU ACESSO {(nomeLojaInput || reseller?.nome || 'CINESTREAM').toUpperCase()} ESTÁ LIBERADO!* 🌟</div>
+                <div>👤 *Usuário:* cliente_exemplo</div>
+                <div>🔑 *Senha:* ••••••••</div>
+                <div style={{ color: '#60a5fa', fontWeight: '600', marginTop: '3px' }}>
+                  🌐 *Acesse agora:* {customLinkInput.trim() || 'https://topcanais.tv'}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem' }}>
+                <button
+                  type="button"
+                  className="reseller-action-btn"
+                  style={{ flex: 1, padding: '0.85rem', justifyContent: 'center' }}
+                  onClick={() => setLinkModalOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="reseller-btn-primary"
+                  style={{ flex: 1, marginTop: 0 }}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? 'Salvando...' : 'Salvar Link Exclusivo'}
                 </button>
               </div>
             </form>

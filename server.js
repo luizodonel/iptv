@@ -974,6 +974,25 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 4.1 Atualizar Link Exclusivo e Perfil do Lojista
+  if ((pathname === '/api/reseller/profile' || pathname === '/api/reseller/link') && (req.method === 'PUT' || req.method === 'POST')) {
+    const auth = requireResellerAuth(req, res);
+    if (!auth) return;
+
+    try {
+      const body = await readJsonBody(req);
+      const updated = db.updateResellerProfile(auth.user.id, body);
+      sendJson(res, 200, {
+        success: true,
+        reseller: sanitizeUser(updated),
+        message: 'Link exclusivo e configurações do lojista salvas com sucesso!'
+      });
+    } catch (err) {
+      sendJson(res, 400, { error: err.message });
+    }
+    return;
+  }
+
   // 5. Compra de Créditos pelo Lojista (Checkout PIX)
   if (pathname === '/api/reseller/credits/buy' && req.method === 'POST') {
     const auth = requireResellerAuth(req, res);
@@ -1171,14 +1190,16 @@ const server = http.createServer(async (req, res) => {
 
       const client = result.client;
       const dataExp = new Date(client.fimAssinatura).toLocaleDateString('pt-BR');
+      const accessUrl = auth.user.linkExclusivo || 'https://topcanais.tv';
+      const brandName = auth.user.nomeLoja || auth.user.nome || 'CineStream';
 
-      const whatsappText = `🌟 *SEU ACESSO CINESTREAM ESTÁ LIBERADO!* 🌟\n\n` +
+      const whatsappText = `🌟 *SEU ACESSO ${brandName.toUpperCase()} ESTÁ LIBERADO!* 🌟\n\n` +
         `👤 *Usuário:* ${cleanUsername}\n` +
         `🔑 *Senha:* ${senha}\n` +
         `📺 *Telas Simultâneas:* ${screenCount} tela(s)\n` +
         `🗓️ *Validade:* ${dataExp} (${planInfo.nome})\n\n` +
-        `🌐 *Acesse agora:* https://topcanais.tv\n\n` +
-        `Bom entretenimento! Se precisar de ajuda, conte conosco.`;
+        `🌐 *Acesse agora pelo link exclusivo:* ${accessUrl}\n\n` +
+        `Bom entretenimento! Se precisar de suporte, conte conosco.`;
 
       sendJson(res, 201, {
         success: true,

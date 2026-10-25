@@ -200,6 +200,8 @@ class Database {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS creditos_trimestral INT DEFAULT 0;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS creditos_semestral INT DEFAULT 0;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS creditos_anual INT DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS link_exclusivo TEXT DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS nome_loja TEXT DEFAULT '';
       `);
 
       // Carrega registros existentes no PostgreSQL para a memória
@@ -238,7 +240,9 @@ class Database {
           creditosMensal: Number(r.creditos_mensal) || 0,
           creditosTrimestral: Number(r.creditos_trimestral) || 0,
           creditosSemestral: Number(r.creditos_semestral) || 0,
-          creditosAnual: Number(r.creditos_anual) || 0
+          creditosAnual: Number(r.creditos_anual) || 0,
+          linkExclusivo: r.link_exclusivo || '',
+          nomeLoja: r.nome_loja || ''
         }));
 
         this.data.sessions = sRes.rows.map(r => ({
@@ -367,9 +371,10 @@ class Database {
           id, username, nome, telefone, email, senha_hash, cpf, created_at,
           assinatura_ativa, plano_id, plano_nome, limite_telas, data_assinatura, fim_assinatura,
           trial_used, trial_ip, registration_ip, role, reseller_id, status,
-          creditos_mensal, creditos_trimestral, creditos_semestral, creditos_anual
+          creditos_mensal, creditos_trimestral, creditos_semestral, creditos_anual,
+          link_exclusivo, nome_loja
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
         ON CONFLICT (id) DO UPDATE SET
           username = EXCLUDED.username,
           nome = EXCLUDED.nome,
@@ -392,14 +397,17 @@ class Database {
           creditos_mensal = EXCLUDED.creditos_mensal,
           creditos_trimestral = EXCLUDED.creditos_trimestral,
           creditos_semestral = EXCLUDED.creditos_semestral,
-          creditos_anual = EXCLUDED.creditos_anual;
+          creditos_anual = EXCLUDED.creditos_anual,
+          link_exclusivo = EXCLUDED.link_exclusivo,
+          nome_loja = EXCLUDED.nome_loja;
       `, [
         u.id, u.username, u.nome, u.telefone, u.email, u.senhaHash, u.cpf,
         u.createdAt, u.assinaturaAtiva, u.planoId, u.planoNome, u.limiteTelas,
         u.dataAssinatura, u.fimAssinatura, u.trialUsed || false, u.trialIp || null, u.registrationIp || null,
         u.role || (u.username === 'odonel' ? 'admin' : 'user'), u.resellerId || null, u.status || 'ativo',
         Number(u.creditosMensal) || 0, Number(u.creditosTrimestral) || 0,
-        Number(u.creditosSemestral) || 0, Number(u.creditosAnual) || 0
+        Number(u.creditosSemestral) || 0, Number(u.creditosAnual) || 0,
+        u.linkExclusivo || '', u.nomeLoja || ''
       ]);
     } catch (err) {
       console.error('Erro pgInsertUser:', err.message);
@@ -675,7 +683,9 @@ class Database {
       creditosMensal: Number(userData.creditosMensal) || 0,
       creditosTrimestral: Number(userData.creditosTrimestral) || 0,
       creditosSemestral: Number(userData.creditosSemestral) || 0,
-      creditosAnual: Number(userData.creditosAnual) || 0
+      creditosAnual: Number(userData.creditosAnual) || 0,
+      linkExclusivo: userData.linkExclusivo || '',
+      nomeLoja: userData.nomeLoja || ''
     };
 
     this.data.users.push(newUser);
@@ -1196,7 +1206,9 @@ class Database {
       creditosMensal: 0,
       creditosTrimestral: 0,
       creditosSemestral: 0,
-      creditosAnual: 0
+      creditosAnual: 0,
+      linkExclusivo: resellerData.linkExclusivo || '',
+      nomeLoja: resellerData.nomeLoja || ''
     };
 
     this.data.users.push(newReseller);
@@ -1631,9 +1643,40 @@ class Database {
           },
           totalClients: clients.length,
           activeClients: activeClients.length,
-          totalSpent
+          totalSpent,
+          linkExclusivo: r.linkExclusivo || '',
+          nomeLoja: r.nomeLoja || ''
         };
       });
+  }
+
+  updateResellerProfile(resellerId, updates = {}) {
+    const reseller = this.findUserById(resellerId);
+    if (!reseller) throw new Error('Revendedor não encontrado.');
+
+    if (updates.linkExclusivo !== undefined) {
+      let link = String(updates.linkExclusivo || '').trim();
+      if (link && !link.startsWith('http://') && !link.startsWith('https://')) {
+        link = 'https://' + link;
+      }
+      reseller.linkExclusivo = link;
+    }
+
+    if (updates.nomeLoja !== undefined) {
+      reseller.nomeLoja = String(updates.nomeLoja || '').trim();
+    }
+
+    if (updates.nome !== undefined && updates.nome.trim()) {
+      reseller.nome = String(updates.nome).trim();
+    }
+
+    if (updates.telefone !== undefined) {
+      reseller.telefone = String(updates.telefone).trim();
+    }
+
+    this.saveLocal();
+    this.pgInsertUser(reseller);
+    return reseller;
   }
 
   getAllResellerClients(filterResellerId = null) {
