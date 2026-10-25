@@ -22,7 +22,10 @@ import {
   Calendar,
   Layers,
   ChevronDown,
-  DollarSign
+  DollarSign,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import {
   RESELLER_PLANS,
@@ -270,6 +273,66 @@ export default function MasterResellerTab({ onShowToast }) {
             <div>M: <strong>{totalCreditsCirculating.mensal}</strong> | T: <strong>{totalCreditsCirculating.trimestral}</strong></div>
             <div>S: <strong>{totalCreditsCirculating.semestral}</strong> | A: <strong>{totalCreditsCirculating.anual}</strong></div>
           </div>
+        </div>
+      </div>
+
+      {/* Caixa de Rota Exclusiva B2B para Envio aos Lojistas */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.22) 0%, rgba(15, 23, 42, 0.5) 100%)',
+        border: '1px solid rgba(59, 130, 246, 0.3)',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        marginBottom: '1.25rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px'
+      }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#93c5fd' }}>
+              🔗 Links Exclusivos para Enviar aos Lojistas:
+            </span>
+            <span style={{ fontSize: '11px', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', padding: '2px 8px', borderRadius: '999px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+              🔒 Oculto dos Clientes / Fora do Menu Público
+            </span>
+          </div>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+            Copie o link direto e envie pelo WhatsApp para o lojista acessar ou se cadastrar:
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="reseller-action-btn"
+            style={{ padding: '6px 14px', fontSize: '12px', background: 'rgba(59, 130, 246, 0.2)', border: '1px solid rgba(59, 130, 246, 0.45)', color: '#bfdbfe' }}
+            onClick={() => {
+              const url = `${window.location.origin}/revenda/cadastro`;
+              navigator.clipboard.writeText(url);
+              if (onShowToast) onShowToast('Link de Cadastro (/revenda/cadastro) copiado!');
+            }}
+            title="Copiar link de cadastro do lojista"
+          >
+            <Copy size={13} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+            <span>Copiar Cadastro (/revenda/cadastro)</span>
+          </button>
+
+          <button
+            type="button"
+            className="reseller-action-btn"
+            style={{ padding: '6px 14px', fontSize: '12px', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.45)', color: '#a7f3d0' }}
+            onClick={() => {
+              const url = `${window.location.origin}/revenda/login`;
+              navigator.clipboard.writeText(url);
+              if (onShowToast) onShowToast('Link de Login (/revenda/login) copiado!');
+            }}
+            title="Copiar link de login do lojista"
+          >
+            <Copy size={13} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+            <span>Copiar Login (/revenda/login)</span>
+          </button>
         </div>
       </div>
 

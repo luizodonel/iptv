@@ -117,16 +117,6 @@ export default function Navbar({
               <span>Planos</span>
             </button>
 
-            {/* Revenda B2B / Painel Lojista Button */}
-            <button
-              className="nav-reseller-btn"
-              onClick={onOpenReseller}
-              title={isReseller ? "Painel de Gestão do Lojista" : "Área de Revenda e Lojistas B2B"}
-            >
-              <Briefcase size={16} />
-              <span>{isReseller ? 'Painel Lojista' : 'Revenda B2B'}</span>
-            </button>
-
             {/* Suporte WhatsApp Button */}
             <button
               className="nav-support-btn"
@@ -222,17 +212,19 @@ export default function Navbar({
                       </>
                     )}
 
-                    {/* Acesso ao Portal de Revenda no Dropdown */}
-                    <button
-                      className="dropdown-item"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        if (onOpenReseller) onOpenReseller();
-                      }}
-                    >
-                      <Briefcase size={16} style={{ color: '#60a5fa' }} />
-                      <span>{isReseller ? 'Painel do Lojista' : 'Área de Revenda (B2B)'}</span>
-                    </button>
+                    {/* Acesso ao Portal de Revenda no Dropdown (Apenas se o usuário logado for Revendedor) */}
+                    {isReseller && (
+                      <button
+                        className="dropdown-item"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          if (onOpenReseller) onOpenReseller();
+                        }}
+                      >
+                        <Briefcase size={16} style={{ color: '#60a5fa' }} />
+                        <span>💼 Painel do Lojista</span>
+                      </button>
+                    )}
 
                     <button
                       className="dropdown-item"
