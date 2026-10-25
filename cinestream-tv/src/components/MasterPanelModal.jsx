@@ -129,7 +129,12 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
       ]);
 
       if (statsData) setStats(statsData);
-      if (usersData) setUsers(usersData);
+      if (usersData) {
+        const iptvUsers = Array.isArray(usersData)
+          ? usersData.filter(u => u.role !== 'reseller' && u.planoId !== 'reseller_panel')
+          : [];
+        setUsers(iptvUsers);
+      }
       if (logsData) setLogs(logsData);
     } catch (err) {
       console.error('Erro ao carregar dados do painel master:', err);
@@ -322,9 +327,12 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
-  // Filtragem de Usuários
+  // Filtragem de Usuários (Apenas clientes finais / assinantes IPTV)
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
+      // Exclui lojistas/revendedores caso venham na lista
+      if (u.role === 'reseller' || u.planoId === 'reseller_panel') return false;
+
       // 1. Filtro de busca de texto
       const q = userSearchQuery.toLowerCase().trim();
       if (q) {
@@ -349,7 +357,7 @@ export default function MasterPanelModal({ isOpen, onClose, currentUser }) {
 
   // Lista de Usuários Online no momento (com sessões ativas)
   const onlineUsersList = useMemo(() => {
-    return users.filter(u => u.isOnline || (u.activeSessions && u.activeSessions.length > 0));
+    return users.filter(u => u.role !== 'reseller' && u.planoId !== 'reseller_panel' && (u.isOnline || (u.activeSessions && u.activeSessions.length > 0)));
   }, [users]);
 
   // Filtragem de Logs

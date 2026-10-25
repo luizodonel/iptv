@@ -772,7 +772,11 @@ class Database {
     const now = Date.now();
     const ONLINE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutos
 
-    let totalUsers = this.data.users.length;
+    // Revendedores (lojistas B2B) não são clientes de IPTV e não entram nas métricas de usuários de TV
+    const iptvUsers = (this.data.users || []).filter(u => u.role !== 'reseller' && u.planoId !== 'reseller_panel');
+    const iptvUserIds = new Set(iptvUsers.map(u => u.id));
+
+    let totalUsers = iptvUsers.length;
     let activeUsers = 0;
     let inactiveUsers = 0;
     let onlineUsersCount = 0;
@@ -780,7 +784,7 @@ class Database {
 
     const onlineUserIds = new Set();
 
-    for (const u of this.data.users) {
+    for (const u of iptvUsers) {
       const username = (u.username || '').toLowerCase().trim();
       const isMaster = username === 'odonel' || u.role === 'admin' || u.isMaster;
       const end = u.fimAssinatura ? new Date(u.fimAssinatura).getTime() : null;
@@ -795,6 +799,7 @@ class Database {
 
     for (const s of (this.data.sessions || [])) {
       if (!s.isActive) continue;
+      if (!iptvUserIds.has(s.userId)) continue; // Apenas sessões de usuários IPTV
       const hbTime = new Date(s.lastHeartbeat || s.createdAt).getTime();
       if ((now - hbTime) <= ONLINE_THRESHOLD_MS) {
         onlineSessionsCount++;
@@ -819,7 +824,10 @@ class Database {
     const now = Date.now();
     const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
 
-    return this.data.users.map(u => {
+    // Revendedores ficam exclusivamente na aba de Revenda / B2B e não no rol de assinantes de TV
+    return (this.data.users || [])
+      .filter(u => u.role !== 'reseller' && u.planoId !== 'reseller_panel')
+      .map(u => {
       const username = (u.username || '').toLowerCase().trim();
       const isMaster = username === 'odonel' || u.role === 'admin' || u.isMaster;
       const end = u.fimAssinatura ? new Date(u.fimAssinatura).getTime() : null;
@@ -895,6 +903,7 @@ class Database {
         trialUsed: Boolean(u.trialUsed),
         registrationIp: u.registrationIp,
         isMaster,
+        role: u.role || 'user',
         isOnline: isUserOnline,
         status,
         expiresInText,

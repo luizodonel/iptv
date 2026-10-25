@@ -246,7 +246,8 @@ export async function fetchMasterUsers() {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Erro ao carregar usuários.');
-  return data.users || [];
+  const list = data.users || [];
+  return list.filter(u => u.role !== 'reseller' && u.planoId !== 'reseller_panel');
 }
 
 export async function updateMasterUserStatus(payload) {
