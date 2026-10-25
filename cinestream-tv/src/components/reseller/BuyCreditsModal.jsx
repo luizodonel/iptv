@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import {
   RESELLER_PLANS,
+  getResellerUnitPrice,
   buyResellerCredits,
   checkResellerOrderStatus,
   simulateApproveCreditsOrder
@@ -68,8 +69,10 @@ export default function BuyCreditsModal({
   if (!isOpen) return null;
 
   const currentPlan = RESELLER_PLANS[selectedPlan] || RESELLER_PLANS.mensal;
-  const valorUnitario = currentPlan.preco;
+  const valorUnitario = getResellerUnitPrice(selectedPlan, quantidade);
   const valorTotal = Number((quantidade * valorUnitario).toFixed(2));
+  const valorSemDesconto = Number((quantidade * currentPlan.preco).toFixed(2));
+  const economia = Number((valorSemDesconto - valorTotal).toFixed(2));
 
   const handleGeneratePix = async (e) => {
     e.preventDefault();
@@ -152,10 +155,13 @@ export default function BuyCreditsModal({
                     >
                       <div className="reseller-plan-title">{p.nome}</div>
                       <div className="reseller-plan-price">
-                        R$ {p.preco.toFixed(2).replace('.', ',')} / crédito
+                        R$ {p.preco.toFixed(2).replace('.', ',')}
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
-                        {p.badge}
+                      <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, marginTop: '0.15rem' }}>
+                        Até R$ {p.preco50.toFixed(2).replace('.', ',')} (50+ un)
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                        {p.custoMes ? `Equiv. R$ ${p.custoMes.toFixed(2).replace('.', ',')}/mês` : p.badge}
                       </div>
                     </div>
                   ))}
@@ -216,6 +222,62 @@ export default function BuyCreditsModal({
                     </button>
                   ))}
                 </div>
+
+                {/* Indicadores Visuais das Faixas de Desconto por Volume */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '0.5rem',
+                  marginTop: '0.85rem'
+                }}>
+                  <div style={{
+                    padding: '0.6rem 0.4rem',
+                    borderRadius: '8px',
+                    background: quantidade < 10 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                    border: quantidade < 10 ? '1px solid #f59e0b' : '1px solid rgba(255, 255, 255, 0.08)',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <div style={{ fontSize: '0.7rem', color: quantidade < 10 ? '#f59e0b' : '#94a3b8', fontWeight: 700 }}>
+                      {quantidade < 10 && '✓ '}Faixa 1 (1 a 9 un)
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 900, color: '#f8fafc', marginTop: '0.2rem' }}>
+                      R$ {currentPlan.preco.toFixed(2).replace('.', ',')}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '0.6rem 0.4rem',
+                    borderRadius: '8px',
+                    background: (quantidade >= 10 && quantidade < 50) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                    border: (quantidade >= 10 && quantidade < 50) ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <div style={{ fontSize: '0.7rem', color: (quantidade >= 10 && quantidade < 50) ? '#10b981' : '#94a3b8', fontWeight: 700 }}>
+                      {(quantidade >= 10 && quantidade < 50) && '✓ '}Faixa 2 (10 a 49 un) 🔥
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 900, color: '#f8fafc', marginTop: '0.2rem' }}>
+                      R$ {currentPlan.preco10.toFixed(2).replace('.', ',')}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '0.6rem 0.4rem',
+                    borderRadius: '8px',
+                    background: quantidade >= 50 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                    border: quantidade >= 50 ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.08)',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <div style={{ fontSize: '0.7rem', color: quantidade >= 50 ? '#60a5fa' : '#94a3b8', fontWeight: 700 }}>
+                      {quantidade >= 50 && '✓ '}Faixa 3 (50+ un) 🚀
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 900, color: '#f8fafc', marginTop: '0.2rem' }}>
+                      R$ {currentPlan.preco50.toFixed(2).replace('.', ',')}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Resumo do Cálculo Financeiro (Seção 4.1) */}
@@ -232,6 +294,14 @@ export default function BuyCreditsModal({
                   <span style={{ color: '#94a3b8' }}>Quantidade Solicitada:</span>
                   <strong style={{ color: '#f59e0b' }}>{quantidade} crédito(s)</strong>
                 </div>
+                {economia > 0 && (
+                  <div className="reseller-credit-rule-row" style={{ color: '#10b981', paddingTop: '0.25rem' }}>
+                    <span style={{ color: '#10b981' }}>Economia de Volume:</span>
+                    <strong style={{ color: '#10b981' }}>
+                      - R$ {economia.toFixed(2).replace('.', ',')} ({Math.round((economia / valorSemDesconto) * 100)}% OFF)
+                    </strong>
+                  </div>
+                )}
                 <div style={{
                   marginTop: '0.75rem',
                   paddingTop: '0.75rem',

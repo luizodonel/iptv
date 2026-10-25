@@ -9,6 +9,7 @@ import { db, normalizeIp } from './db.js';
 import { 
   PLANS, 
   RESELLER_PLANS,
+  getResellerUnitPrice,
   hashPassword, 
   verifyPassword, 
   generateToken, 
@@ -1036,7 +1037,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const valorUnitario = planInfo.preco;
+      const valorUnitario = getResellerUnitPrice(pKey, qtd);
       const valorTotal = Number((qtd * valorUnitario).toFixed(2));
 
       // Criação de cobrança Pix

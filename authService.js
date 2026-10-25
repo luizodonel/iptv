@@ -125,30 +125,59 @@ export const RESELLER_PLANS = {
     nome: 'Mensal',
     duracaoDias: 30,
     preco: 12.50,
-    descricao: '1 crédito = 1 tela por 30 dias'
+    preco10: 10.00,
+    preco50: 8.00,
+    custoMes: 12.50,
+    descricao: '1 crédito = 1 tela por 30 dias (R$ 12,50 | R$ 10,00 de 10 a 49 | R$ 8,00 para 50+)'
   },
   trimestral: {
     id: 'trimestral',
     nome: 'Trimestral',
     duracaoDias: 90,
-    preco: 32.50,
-    descricao: '1 crédito = 1 tela por 90 dias (3 meses)'
+    preco: 28.00,
+    preco10: 24.00,
+    preco50: 20.00,
+    custoMes: 9.33,
+    descricao: '1 crédito = 1 tela por 90 dias (R$ 28,00 | R$ 24,00 de 10 a 49 | R$ 20,00 para 50+)'
   },
   semestral: {
     id: 'semestral',
     nome: 'Semestral',
     duracaoDias: 180,
-    preco: 60.00,
-    descricao: '1 crédito = 1 tela por 180 dias (6 meses)'
+    preco: 48.00,
+    preco10: 42.00,
+    preco50: 36.00,
+    custoMes: 8.00,
+    descricao: '1 crédito = 1 tela por 180 dias (R$ 48,00 | R$ 42,00 de 10 a 49 | R$ 36,00 para 50+)'
   },
   anual: {
     id: 'anual',
     nome: 'Anual',
     duracaoDias: 365,
-    preco: 110.00,
-    descricao: '1 crédito = 1 tela por 365 dias (1 ano)'
+    preco: 80.00,
+    preco10: 72.00,
+    preco50: 60.00,
+    custoMes: 6.67,
+    descricao: '1 crédito = 1 tela por 365 dias (R$ 80,00 | R$ 72,00 de 10 a 49 | R$ 60,00 para 50+)'
   }
 };
+
+/**
+ * Retorna o preço unitário do crédito para o plano conforme a quantidade (faixas de desconto)
+ */
+export function getResellerUnitPrice(planoKey, quantidade = 1) {
+  const pKey = String(planoKey || '').toLowerCase().trim();
+  const plan = RESELLER_PLANS[pKey];
+  if (!plan) return 0;
+  const qtd = Math.max(1, parseInt(quantidade, 10) || 1);
+  if (qtd >= 50 && plan.preco50 !== undefined) {
+    return plan.preco50;
+  }
+  if (qtd >= 10 && plan.preco10 !== undefined) {
+    return plan.preco10;
+  }
+  return plan.preco;
+}
 
 /**
  * Validação de CPF com cálculo oficial de dígitos verificadores
