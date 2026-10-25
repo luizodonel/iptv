@@ -1663,12 +1663,14 @@ class Database {
     const reseller = this.findUserById(resellerId);
     if (!reseller) throw new Error('Revendedor não encontrado.');
 
-    if (updates.linkExclusivo !== undefined) {
-      let link = String(updates.linkExclusivo || '').trim();
-      if (link && !link.startsWith('http://') && !link.startsWith('https://')) {
-        link = 'https://' + link;
-      }
-      reseller.linkExclusivo = link;
+    if (updates.linkExclusivo !== undefined || updates.linkSlug !== undefined) {
+      const raw = String(updates.linkSlug || updates.linkExclusivo || '').trim();
+      const cleanSlug = raw
+        .replace(/^https?:\/\/[^\/]+\/?/i, '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toLowerCase();
+      reseller.linkSlug = cleanSlug;
+      reseller.linkExclusivo = cleanSlug ? `https://topcanais.logistadigital.com.br/${cleanSlug}` : '';
     }
 
     if (updates.nomeLoja !== undefined) {

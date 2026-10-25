@@ -1190,7 +1190,7 @@ const server = http.createServer(async (req, res) => {
 
       const client = result.client;
       const dataExp = new Date(client.fimAssinatura).toLocaleDateString('pt-BR');
-      const accessUrl = auth.user.linkExclusivo || 'https://topcanais.tv';
+      const accessUrl = auth.user.linkExclusivo || 'https://topcanais.logistadigital.com.br';
       const brandName = auth.user.nomeLoja || auth.user.nome || 'CineStream';
 
       const whatsappText = `🌟 *SEU ACESSO ${brandName.toUpperCase()} ESTÁ LIBERADO!* 🌟\n\n` +

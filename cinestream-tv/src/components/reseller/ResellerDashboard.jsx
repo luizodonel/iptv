@@ -23,7 +23,8 @@ import {
   ChevronRight,
   TrendingUp,
   ShieldCheck,
-  Globe
+  Globe,
+  X
 } from 'lucide-react';
 import {
   RESELLER_PLANS,
@@ -70,8 +71,16 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
   const [copiedClientId, setCopiedClientId] = useState(null);
 
   // Link Exclusivo & Domínio Próprio do Lojista
+  const extractSlug = (url) => {
+    if (!url) return '';
+    return String(url)
+      .replace(/^https?:\/\/[^\/]+\/?/i, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase();
+  };
+
   const [linkModalOpen, setLinkModalOpen] = useState(false);
-  const [customLinkInput, setCustomLinkInput] = useState(currentUser?.linkExclusivo || '');
+  const [customSlugInput, setCustomSlugInput] = useState(() => extractSlug(currentUser?.linkExclusivo));
   const [nomeLojaInput, setNomeLojaInput] = useState(currentUser?.nomeLoja || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
@@ -93,7 +102,9 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
       if (meRes?.reseller) {
         setReseller(meRes.reseller);
         setCredits(meRes.credits || meRes.reseller.creditos);
-        if (meRes.reseller.linkExclusivo) setCustomLinkInput(meRes.reseller.linkExclusivo);
+        if (meRes.reseller.linkExclusivo) {
+          setCustomSlugInput(extractSlug(meRes.reseller.linkExclusivo));
+        }
         if (meRes.reseller.nomeLoja) setNomeLojaInput(meRes.reseller.nomeLoja);
       }
       setClients(clientsRes);
@@ -168,7 +179,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
   };
 
   const handleCopyAccess = (client) => {
-    const accessUrl = reseller?.linkExclusivo || 'https://topcanais.tv';
+    const accessUrl = reseller?.linkExclusivo || 'https://topcanais.logistadigital.com.br';
     const storeName = reseller?.nomeLoja || reseller?.nome || 'CineStream';
     const text = `🌟 *SEU ACESSO ${storeName.toUpperCase()} ESTÁ ATIVO!* 🌟\n\n` +
       `👤 *Usuário:* ${client.username}\n` +
@@ -187,8 +198,11 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
     setSavingProfile(true);
     setProfileSuccessMsg(null);
     try {
+      const cleanSlug = (customSlugInput || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const fullLink = cleanSlug ? `https://topcanais.logistadigital.com.br/${cleanSlug}` : '';
       const res = await updateResellerProfile({
-        linkExclusivo: customLinkInput,
+        linkExclusivo: fullLink,
+        linkSlug: cleanSlug,
         nomeLoja: nomeLojaInput
       });
       setProfileSuccessMsg('Link exclusivo e dados da loja atualizados com sucesso!');
@@ -196,6 +210,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
         setReseller(prev => ({
           ...prev,
           linkExclusivo: res.reseller.linkExclusivo,
+          linkSlug: res.reseller.linkSlug,
           nomeLoja: res.reseller.nomeLoja
         }));
       }
@@ -362,7 +377,7 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                     {reseller.nomeLoja && <span style={{ color: '#cbd5e1' }}> ({reseller.nomeLoja})</span>}
                   </span>
                 ) : (
-                  <span>Cadastre seu link (ex: <em>https://linkdologista.logistadigital.com.br/</em>) para que seus clientes recebam o seu endereço personalizado.</span>
+                  <span>Cadastre o nome do seu link (ex: <em>logistateste</em>) para que seus clientes recebam o link exclusivo <strong>https://topcanais.logistadigital.com.br/logistateste</strong></span>
                 )}
               </div>
             </div>
@@ -917,15 +932,32 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
 
       {/* Modal de Configuração do Link Exclusivo / Domínio do Lojista */}
       {linkModalOpen && (
-        <div className="reseller-modal-backdrop">
-          <div className="reseller-modal-card" style={{ maxWidth: '520px' }}>
-            <div className="reseller-modal-header">
-              <div className="reseller-modal-title">
-                <Globe size={22} style={{ color: '#3b82f6' }} />
+        <div
+          className="reseller-modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setLinkModalOpen(false); }}
+        >
+          <div className="reseller-modal-card" style={{ maxWidth: '540px' }}>
+            <div className="reseller-modal-header" style={{ position: 'relative', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#f59e0b'
+                }}>
+                  <Globe size={22} />
+                </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Cadastrar Link Exclusivo</h3>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8' }}>
-                    Personalize o domínio ou endereço que seus clientes acessarão
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#f8fafc', fontWeight: 800 }}>
+                    Cadastrar Link Exclusivo
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#94a3b8' }}>
+                    Personalize o link exclusivo que seus clientes acessarão
                   </p>
                 </div>
               </div>
@@ -933,40 +965,84 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                 type="button"
                 className="reseller-modal-close"
                 onClick={() => setLinkModalOpen(false)}
+                title="Fechar"
               >
-                <Power size={18} style={{ transform: 'rotate(45deg)' }} />
+                <X size={20} />
               </button>
             </div>
 
             {profileSuccessMsg && (
-              <div className="reseller-alert success" style={{ margin: '1rem 0 0 0' }}>
+              <div className="reseller-alert success" style={{ margin: '0 0 1rem 0' }}>
                 <CheckCircle2 size={16} />
                 <span>{profileSuccessMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveProfile} style={{ marginTop: '1rem' }}>
+            <form onSubmit={handleSaveProfile}>
               <div className="reseller-form-group">
                 <label className="reseller-label">
                   <span>Link / Domínio Exclusivo do Lojista</span>
                 </label>
-                <div className="reseller-input-wrapper">
-                  <Globe size={18} className="reseller-input-icon" />
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'stretch',
+                  background: 'rgba(2, 6, 23, 0.75)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  marginTop: '0.35rem',
+                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4)'
+                }}>
+                  {/* Prefixo Bloqueado */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '0 12px',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    borderRight: '1px solid rgba(245, 158, 11, 0.25)',
+                    color: '#f59e0b',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    userSelect: 'none',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    <Globe size={15} />
+                    <span>https://topcanais.logistadigital.com.br/</span>
+                  </div>
+
+                  {/* Input onde digita APENAS o slug */}
                   <input
                     type="text"
-                    className="reseller-input"
-                    placeholder="https://linkdologista.logistadigital.com.br/"
-                    value={customLinkInput}
-                    onChange={(e) => setCustomLinkInput(e.target.value)}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      padding: '12px 14px',
+                      color: '#f8fafc',
+                      fontSize: '0.95rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 700
+                    }}
+                    placeholder="logistateste"
+                    value={customSlugInput}
+                    onChange={(e) => {
+                      // Remove pontos, traços, espaços e caracteres especiais (apenas letras e números minúsculos)
+                      const clean = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                      setCustomSlugInput(clean);
+                    }}
+                    maxLength={32}
                     autoFocus
                   />
                 </div>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>
-                  💡 Exemplo: <code>https://linkdologista.logistadigital.com.br/</code> ou <code>https://meusite.com/tv</code>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.4rem', display: 'block', lineHeight: '1.4' }}>
+                  🔒 O domínio <strong>https://topcanais.logistadigital.com.br/</strong> é fixo e bloqueado. Digite somente o nome do seu link (sem pontos, traços ou caracteres especiais).
                 </span>
               </div>
 
-              <div className="reseller-form-group">
+              <div className="reseller-form-group" style={{ marginTop: '1rem' }}>
                 <label className="reseller-label">
                   <span>Nome da Loja / Marca (Opcional)</span>
                 </label>
@@ -975,39 +1051,39 @@ export default function ResellerDashboard({ currentUser, onLogout, onNavigateToT
                   <input
                     type="text"
                     className="reseller-input"
-                    placeholder="Ex: Lojista Digital TV"
+                    placeholder="Ex: Luiz Teste TV"
                     value={nomeLojaInput}
                     onChange={(e) => setNomeLojaInput(e.target.value)}
                   />
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>
-                  Aparecerá no cabeçalho dos acessos gerados para WhatsApp.
+                  Aparecerá no cabeçalho das mensagens automáticas de acesso no WhatsApp.
                 </span>
               </div>
 
               {/* Pré-visualização ao vivo da mensagem para o cliente */}
               <div style={{
-                background: 'rgba(0, 0, 0, 0.35)',
+                background: 'rgba(0, 0, 0, 0.45)',
                 border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                marginTop: '1rem',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                marginTop: '1.25rem',
                 fontSize: '0.8rem',
                 color: '#cbd5e1',
-                lineHeight: '1.4'
+                lineHeight: '1.5'
               }}>
-                <div style={{ color: '#25D366', fontWeight: 'bold', marginBottom: '4px' }}>
-                  📲 Como seu cliente verá no WhatsApp:
+                <div style={{ color: '#25D366', fontWeight: 'bold', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  📲 <span>Como seu cliente verá no WhatsApp:</span>
                 </div>
                 <div>🌟 *SEU ACESSO {(nomeLojaInput || reseller?.nome || 'CINESTREAM').toUpperCase()} ESTÁ LIBERADO!* 🌟</div>
                 <div>👤 *Usuário:* cliente_exemplo</div>
                 <div>🔑 *Senha:* ••••••••</div>
-                <div style={{ color: '#60a5fa', fontWeight: '600', marginTop: '3px' }}>
-                  🌐 *Acesse agora:* {customLinkInput.trim() || 'https://topcanais.tv'}
+                <div style={{ color: '#60a5fa', fontWeight: '700', marginTop: '4px', wordBreak: 'break-all' }}>
+                  🌐 *Acesse agora:* {customSlugInput ? `https://topcanais.logistadigital.com.br/${customSlugInput}` : 'https://topcanais.logistadigital.com.br'}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
                 <button
                   type="button"
                   className="reseller-action-btn"
