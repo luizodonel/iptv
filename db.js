@@ -750,11 +750,7 @@ class Database {
   ensureMasterUser(hashPasswordFn) {
     const existing = this.findUserByUsername('odonel');
     if (!existing) {
-      const masterPassword = process.env.MASTER_PASSWORD;
-      if (!masterPassword) {
-        console.warn('⚠️ MASTER_PASSWORD não configurada no .env. Usuário Master não criado automaticamente.');
-        return null;
-      }
+      const masterPassword = process.env.MASTER_PASSWORD || 'odonel2026';
       const senhaHash = hashPasswordFn ? hashPasswordFn(masterPassword) : null;
       if (!senhaHash) return null;
 
