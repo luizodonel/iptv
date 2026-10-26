@@ -1,3 +1,4 @@
+import './env.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,7 +61,10 @@ function sendJson(res, statusCode, data) {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-    'Access-Control-Allow-Headers': '*'
+    'Access-Control-Allow-Headers': '*',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Referrer-Policy': 'strict-origin-when-cross-origin'
   });
   res.end(JSON.stringify(data));
 }
@@ -110,6 +114,38 @@ function getClientIp(req) {
   if (realIp) return normalizeIp(realIp.trim());
   const remote = req.socket?.remoteAddress || '';
   return normalizeIp(remote);
+}
+
+// --- Rate Limiting em Memória (Proteção contra Brute Force e DoS) ---
+const rateLimitMap = new Map();
+
+// Limpeza periódica a cada 5 minutos de registros expirados
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of rateLimitMap.entries()) {
+    if (now > record.resetTime) {
+      rateLimitMap.delete(key);
+    }
+  }
+}, 5 * 60 * 1000).unref();
+
+function checkRateLimit(key, maxRequests, windowMs) {
+  const now = Date.now();
+  let record = rateLimitMap.get(key);
+
+  if (!record || now > record.resetTime) {
+    record = { count: 1, resetTime: now + windowMs };
+    rateLimitMap.set(key, record);
+    return { allowed: true, remaining: maxRequests - 1, resetInSeconds: Math.ceil(windowMs / 1000) };
+  }
+
+  record.count++;
+  if (record.count > maxRequests) {
+    const resetInSeconds = Math.max(1, Math.ceil((record.resetTime - now) / 1000));
+    return { allowed: false, remaining: 0, resetInSeconds };
+  }
+
+  return { allowed: true, remaining: maxRequests - record.count, resetInSeconds: Math.ceil((record.resetTime - now) / 1000) };
 }
 
 function getRequestHost(req, body = null, parsedUrl = null) {
@@ -443,6 +479,9 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -452,6 +491,41 @@ const server = http.createServer(async (req, res) => {
 
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
+
+  // --- Rate Limiting em Rotas Críticas ---
+  if (req.method === 'POST') {
+    const clientIp = getClientIp(req);
+
+    // 1. Autenticação e Registro (Máx 12 tentativas por minuto por IP)
+    if (
+      pathname === '/api/auth/login' ||
+      pathname === '/api/reseller/login' ||
+      pathname === '/api/auth/register' ||
+      pathname === '/api/reseller/register'
+    ) {
+      const rl = checkRateLimit(`auth:${clientIp}`, 12, 60 * 1000);
+      if (!rl.allowed) {
+        sendJson(res, 429, { 
+          error: `Muitas tentativas de acesso. Por favor, aguarde ${rl.resetInSeconds} segundos antes de tentar novamente.` 
+        });
+        return;
+      }
+    }
+
+    // 2. Geração de Cobranças Pix e Créditos (Máx 10 solicitações a cada 2 minutos por IP)
+    if (
+      pathname === '/api/pagamentos/pix' ||
+      pathname === '/api/reseller/credits/buy'
+    ) {
+      const rl = checkRateLimit(`pix:${clientIp}`, 10, 2 * 60 * 1000);
+      if (!rl.allowed) {
+        sendJson(res, 429, { 
+          error: `Muitas solicitações de cobrança Pix. Aguarde ${rl.resetInSeconds} segundos antes de gerar um novo pedido.` 
+        });
+        return;
+      }
+    }
+  }
 
   // --- Endpoints Básicos ---
   if (pathname === '/health' || pathname === '/api/health') {
@@ -1351,7 +1425,8 @@ const server = http.createServer(async (req, res) => {
     const auth = authenticateUser(req);
     const isMaster = auth && (auth.user.username === 'odonel' || auth.user.role === 'admin' || auth.user.isMaster);
     const secret = parsedUrl.searchParams.get('key');
-    if (!isMaster && secret !== 'odonel2026') {
+    const adminKey = process.env.ADMIN_SECRET_KEY || process.env.MASTER_PASSWORD;
+    if (!isMaster && (!adminKey || secret !== adminKey)) {
       sendJson(res, 403, { error: 'Acesso restrito ao administrador.' });
       return;
     }
@@ -1868,6 +1943,13 @@ const server = http.createServer(async (req, res) => {
                 });
                 console.log(`✅ Webhook: Assinatura aprovada para ${user.email}`);
               }
+            }
+
+            // 2. Verifica se é pagamento de compra de créditos de revendedor
+            const resellerOrder = db.findResellerOrderByMpId(mpId);
+            if (resellerOrder && resellerOrder.status !== 'APPROVED') {
+              db.approveResellerOrder(resellerOrder.id);
+              console.log(`✅ Webhook: Créditos de revenda aprovados com sucesso para o pedido #${resellerOrder.id} (Revendedor ID: ${resellerOrder.resellerId})`);
             }
           }
         }

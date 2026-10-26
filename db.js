@@ -1,3 +1,4 @@
+import './env.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,9 +37,8 @@ const DEFAULT_DATA = {
   resellerOrders: []
 };
 
-// Configuração do pool de conexão com PostgreSQL
-const DATABASE_URL = process.env.DATABASE_URL || 
-  'postgresql://iptvusuario:QgO0Un4PlKNLWRXUwJng5nJBDodBEXHjFH9RYnDPH2gIaYqZoM1fGyM59bhhmvws@dh9buqsx9ote6ny5nuxon7ob:5432/postgres';
+// Configuração do pool de conexão com PostgreSQL (obtida estritamente via .env)
+const DATABASE_URL = process.env.DATABASE_URL || '';
 
 class Database {
   constructor() {
@@ -79,11 +79,15 @@ class Database {
   }
 
   async initPostgres() {
-    if (!DATABASE_URL) return;
+    const connStr = process.env.DATABASE_URL || DATABASE_URL;
+    if (!connStr) {
+      console.log('ℹ️ DATABASE_URL não definida no .env. Operando com armazenamento local (data/database.json).');
+      return;
+    }
 
     try {
       this.pool = new Pool({
-        connectionString: DATABASE_URL,
+        connectionString: connStr,
         ssl: false,
         max: 10,
         idleTimeoutMillis: 30000,
@@ -746,7 +750,12 @@ class Database {
   ensureMasterUser(hashPasswordFn) {
     const existing = this.findUserByUsername('odonel');
     if (!existing) {
-      const senhaHash = hashPasswordFn ? hashPasswordFn('odonel2026') : null;
+      const masterPassword = process.env.MASTER_PASSWORD;
+      if (!masterPassword) {
+        console.warn('⚠️ MASTER_PASSWORD não configurada no .env. Usuário Master não criado automaticamente.');
+        return null;
+      }
+      const senhaHash = hashPasswordFn ? hashPasswordFn(masterPassword) : null;
       if (!senhaHash) return null;
 
       const masterUser = {

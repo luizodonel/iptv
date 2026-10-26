@@ -1,8 +1,18 @@
+import './env.js';
 import crypto from 'node:crypto';
 import { db } from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'top-canais-tv-super-secret-key-2026-xyz987';
-const LEGACY_JWT_SECRET = 'oninha-tv-super-secret-key-2026-xyz987';
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET não configurado nas variáveis de ambiente (.env).');
+  }
+  return secret;
+}
+
+function getLegacyJwtSecret() {
+  return process.env.LEGACY_JWT_SECRET || '';
+}
 
 export const PLANS = {
   'tela1-mensal': {
@@ -70,10 +80,11 @@ export function verifyPassword(password, storedHash) {
  * Gera token de sessão assinado HMAC-SHA256
  */
 export function generateToken(payload) {
+  const secret = getJwtSecret();
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const exp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 dias de expiração
   const body = Buffer.from(JSON.stringify({ ...payload, exp })).toString('base64url');
-  const signature = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
   return `${header}.${body}.${signature}`;
 }
 
@@ -85,11 +96,19 @@ export function verifyToken(token) {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
 
+  let secret;
+  try {
+    secret = getJwtSecret();
+  } catch {
+    return null;
+  }
+
+  const legacySecret = getLegacyJwtSecret();
   const [header, body, signature] = parts;
-  const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  const expectedSig = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
   let isValid = (signature === expectedSig);
-  if (!isValid) {
-    const legacySig = crypto.createHmac('sha256', LEGACY_JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  if (!isValid && legacySecret) {
+    const legacySig = crypto.createHmac('sha256', legacySecret).update(`${header}.${body}`).digest('base64url');
     isValid = (signature === legacySig);
   }
   

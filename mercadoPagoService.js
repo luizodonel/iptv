@@ -1,14 +1,13 @@
+import './env.js';
 import crypto from 'node:crypto';
 
-// Token de acesso do Mercado Pago (obtido via variável de ambiente ou fallback do projeto)
-const DEFAULT_TOKEN = 'APP_USR-5741665921712781-082413-bc420761bcc13420c1489262ecbf2c81-3412978164';
-
+// Token de acesso do Mercado Pago obtido estritamente via variável de ambiente (.env)
 function getAccessToken() {
   const envToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
-  if (envToken && !envToken.includes('TEST-XXXXXXXX') && !envToken.includes('placeholder')) {
+  if (envToken && !envToken.includes('TEST-XXXXXXXX') && !envToken.includes('placeholder') && !envToken.includes('seu_token')) {
     return envToken.trim();
   }
-  return DEFAULT_TOKEN;
+  return '';
 }
 
 export class MercadoPagoService {

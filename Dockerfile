@@ -20,7 +20,7 @@ RUN npm install --omit=dev
 
 # Copiar arquivos compilados e scripts do servidor
 COPY --from=build /app/dist ./dist
-COPY server.js db.js authService.js mercadoPagoService.js ./
+COPY server.js db.js authService.js mercadoPagoService.js env.js ./
 RUN mkdir -p /app/data
 
 ENV PORT=3000
