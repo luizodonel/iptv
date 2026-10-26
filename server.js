@@ -1136,25 +1136,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 7. Simular Aprovação de Pagamento de Crédito (Demo / Teste Instantâneo)
-  if (pathname === '/api/reseller/credits/simulate-approve' && req.method === 'POST') {
-    const auth = requireResellerAuth(req, res);
-    if (!auth) return;
-
-    try {
-      const body = await readJsonBody(req);
-      const { orderId } = body;
-      const approved = db.approveResellerOrder(orderId);
-      sendJson(res, 200, {
-        success: true,
-        status: 'APPROVED',
-        credits: db.getResellerCredits(auth.user.id),
-        order: approved.order,
-        message: 'Créditos liberados com sucesso!'
-      });
-    } catch (err) {
-      sendJson(res, 400, { error: err.message });
-    }
+  // 7. Simular Aprovação de Pagamento de Crédito (Desativado por Segurança em Produção)
+  if (pathname === '/api/reseller/credits/simulate-approve') {
+    sendJson(res, 403, { 
+      error: 'Simulação desativada por segurança. A aprovação de créditos é realizada exclusivamente via confirmação bancária do Pix no Mercado Pago.' 
+    });
     return;
   }
 

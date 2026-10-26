@@ -240,17 +240,6 @@ export async function checkResellerOrderStatus(orderId) {
   return data;
 }
 
-export async function simulateApproveCreditsOrder(orderId) {
-  const res = await fetch('/api/reseller/credits/simulate-approve', {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ orderId })
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Erro ao simular aprovação.');
-  return data;
-}
-
 export async function getResellerClients() {
   const res = await fetch('/api/reseller/clients', {
     headers: getHeaders()

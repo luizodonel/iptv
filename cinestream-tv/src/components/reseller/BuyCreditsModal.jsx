@@ -7,7 +7,6 @@ import {
   Check,
   Clock,
   Sparkles,
-  Zap,
   CheckCircle2,
   AlertCircle,
   Plus,
@@ -17,8 +16,7 @@ import {
   RESELLER_PLANS,
   getResellerUnitPrice,
   buyResellerCredits,
-  checkResellerOrderStatus,
-  simulateApproveCreditsOrder
+  checkResellerOrderStatus
 } from '../../services/resellerService';
 
 export default function BuyCreditsModal({
@@ -36,7 +34,6 @@ export default function BuyCreditsModal({
   const [pixData, setPixData] = useState(null);
   const [copiedPix, setCopiedPix] = useState(false);
   const [pollStatus, setPollStatus] = useState('PENDING'); // 'PENDING' | 'APPROVED'
-  const [checkingPayment, setCheckingPayment] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -102,20 +99,6 @@ export default function BuyCreditsModal({
     navigator.clipboard.writeText(pixData.qrCode);
     setCopiedPix(true);
     setTimeout(() => setCopiedPix(false), 3000);
-  };
-
-  const handleSimulateApproval = async () => {
-    if (!pixData?.orderId) return;
-    setCheckingPayment(true);
-    try {
-      const res = await simulateApproveCreditsOrder(pixData.orderId);
-      setPollStatus('APPROVED');
-      if (onCreditsPurchased) onCreditsPurchased(res.credits);
-    } catch (err) {
-      alert(err.message || 'Erro ao simular aprovação.');
-    } finally {
-      setCheckingPayment(false);
-    }
   };
 
   return (
@@ -481,31 +464,6 @@ export default function BuyCreditsModal({
             }}>
               <span className="pulse-glow" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
               <span>Aguardando confirmação bancária em tempo real...</span>
-            </div>
-
-            {/* Ação de Demonstração / Teste Instantâneo */}
-            <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1rem', marginTop: '1rem' }}>
-              <button
-                type="button"
-                onClick={handleSimulateApproval}
-                disabled={checkingPayment}
-                style={{
-                  background: 'rgba(34, 197, 94, 0.15)',
-                  border: '1px solid rgba(34, 197, 94, 0.3)',
-                  color: '#4ade80',
-                  padding: '0.65rem 1rem',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                <Zap size={16} />
-                <span>{checkingPayment ? 'Confirmando...' : 'Simular Aprovação Imediata (Ambiente de Testes)'}</span>
-              </button>
             </div>
           </div>
         )}

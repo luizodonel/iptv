@@ -119,16 +119,7 @@ export class MercadoPagoService {
     }
 
     if (this.isMock()) {
-      const mockId = 'mp_pix_' + Date.now();
-      return {
-        id: mockId,
-        point_of_interaction: {
-          transaction_data: {
-            qr_code: `00020126580014br.gov.bcb.pix0136cinestream-revenda-${mockId}520400005303986540${Number(valorTotal).toFixed(2)}5802BR5920CINESTREAM REVENDA6009BRASILIA62070503***6304ABCD`,
-            qr_code_base64: ''
-          }
-        }
-      };
+      throw new Error('Chave do Mercado Pago (MERCADOPAGO_ACCESS_TOKEN) não configurada.');
     }
 
     const url = 'https://api.mercadopago.com/v1/payments';
@@ -140,46 +131,24 @@ export class MercadoPagoService {
       payer
     };
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Idempotency-Key': crypto.randomUUID()
-        },
-        body: JSON.stringify(body)
-      });
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Idempotency-Key': crypto.randomUUID()
+      },
+      body: JSON.stringify(body)
+    });
 
-      const data = await res.json();
-      if (!res.ok) {
-        console.warn('Mercado Pago API retornou erro:', res.status, data);
-        const mockId = 'mp_pix_' + Date.now();
-        return {
-          id: mockId,
-          point_of_interaction: {
-            transaction_data: {
-              qr_code: `00020126580014br.gov.bcb.pix0136cinestream-revenda-${mockId}520400005303986540${Number(valorTotal).toFixed(2)}5802BR5920CINESTREAM REVENDA6009BRASILIA62070503***6304ABCD`,
-              qr_code_base64: ''
-            }
-          }
-        };
-      }
-
-      return data;
-    } catch (err) {
-      console.warn('Erro ao conectar ao Mercado Pago:', err.message);
-      const mockId = 'mp_pix_' + Date.now();
-      return {
-        id: mockId,
-        point_of_interaction: {
-          transaction_data: {
-            qr_code: `00020126580014br.gov.bcb.pix0136cinestream-revenda-${mockId}520400005303986540${Number(valorTotal).toFixed(2)}5802BR5920CINESTREAM REVENDA6009BRASILIA62070503***6304ABCD`,
-            qr_code_base64: ''
-          }
-        }
-      };
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('Mercado Pago API retornou erro:', res.status, data);
+      const errMsg = data.message || (data.cause && data.cause[0]?.description) || JSON.stringify(data);
+      throw new Error(`Erro Mercado Pago (${res.status}): ${errMsg}`);
     }
+
+    return data;
   }
 
   /**
